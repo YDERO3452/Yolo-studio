@@ -1,0 +1,363 @@
+"""YOLO inference module with performance optimisations.
+
+Key optimisations vs. plain Ultralytics predict():
+  - **FP16 half-precision**: 2-3x faster on GPU (auto-disabled on CPU).
+  - **Controlled inference resolution (imgsz)**: avoids sending huge frames
+    (e.g. 4K) into the model; 640 is the YOLO sweet-spot.
+  - **Model warmup**: runs a dummy forward pass after loading so CUDA
+    kernels are compiled *before* the first real frame.
+  - **Explicit device passing**: ensures GPU is used on every predict call.
+"""
+
+import time
+from pathlib import Path
+from typing import Optional
+
+import cv2
+import numpy as np
+from loguru import logger
+
+
+class YOLOInference:
+    """Manages YOLO model inference for images, videos, and webcam."""
+
+    def __init__(self, config=None):
+        self.config = config
+        self.model = None
+        self.is_running = False
+        self._device: str = ""       # '' = auto, '0' = GPU, 'cpu'
+        self._half: bool = True      # FP16 on GPU
+        self._imgsz: int = 640       # inference resolution
+
+    # ------------------------------------------------------------------
+    # Model loading + warmup
+    # ------------------------------------------------------------------
+
+    def load_model(self, model_path: str, device: str = ""):
+        """Load a YOLO model for inference.
+
+        Args:
+            model_path: Path to the model file.
+            device: Device string ('0' for GPU, 'cpu' for CPU, '' for auto).
+                    NOTE: Ultralytics YOLO does NOT honor model.to(device).
+                    The device must be passed via predict(device=...) each call.
+        """
+        from ultralytics import YOLO
+        self.model = YOLO(model_path)
+
+        # Auto-detect device if not specified
+        if not device:
+            try:
+                import torch
+                device = "0" if torch.cuda.is_available() else "cpu"
+            except ImportError:
+                device = "cpu"
+        self._device = device
+
+        # Read performance settings from config
+        if self.config:
+            ic = getattr(self.config, "inference", None)
+            if ic:
+                self._half = getattr(ic, "half", True)
+                self._imgsz = getattr(ic, "imgsz", 640)
+
+        # FP16 only works on CUDA — force-disable on CPU
+        if self._device == "cpu":
+            self._half = False
+            logger.info("CPU device detected — FP16 disabled (not supported on CPU)")
+
+        logger.info(
+            f"Loaded model: {model_path}  device={self._device}  "
+            f"half={self._half}  imgsz={self._imgsz}"
+        )
+
+        # ---- Warmup: run a dummy forward pass ----
+        self._warmup()
+
+        return self.model
+
+    def _warmup(self):
+        """Run a single dummy inference to pre-compile CUDA kernels.
+
+        Without warmup the very first frame can take 3-10 seconds on GPU
+        because PyTorch/CUDA lazily initialises kernels.
+        """
+        if self.model is None:
+            return
+        try:
+            dummy = np.zeros((self._imgsz, self._imgsz, 3), dtype=np.uint8)
+            t0 = time.perf_counter()
+            self.model.predict(
+                source=dummy,
+                device=self._device or None,
+                half=self._half,
+                imgsz=self._imgsz,
+                verbose=False,
+            )
+            elapsed = time.perf_counter() - t0
+            logger.info(f"Model warmup done in {elapsed:.2f}s")
+        except Exception as e:
+            logger.warning(f"Model warmup failed (non-fatal): {e}")
+
+    # ------------------------------------------------------------------
+    # Prediction helpers
+    # ------------------------------------------------------------------
+
+    def _inject_perf_args(self, args: dict) -> dict:
+        """Inject performance-critical args if caller didn't override them."""
+        if "device" not in args and self._device:
+            args["device"] = self._device
+        if "half" not in args:
+            args["half"] = self._half
+        if "imgsz" not in args:
+            args["imgsz"] = self._imgsz
+        return args
+
+    def predict_image(self, image_path: str, **kwargs) -> dict:
+        """Run inference on a single image."""
+        if self.model is None:
+            raise ValueError("No model loaded")
+
+        args = self._build_predict_args(**kwargs)
+        args = self._inject_perf_args(args)
+
+        start_time = time.time()
+        results = self.model.predict(source=image_path, **args)
+        elapsed = time.time() - start_time
+
+        return {
+            "success": True,
+            "results": results,
+            "elapsed": elapsed,
+            "image_path": image_path,
+        }
+
+    def predict_frame(self, frame: np.ndarray, **kwargs) -> dict:
+        """Run inference on a single frame (numpy array).
+
+        Performance notes:
+        - The frame is sent as-is; Ultralytics handles resizing to ``imgsz``
+          internally, which is faster than a manual cv2.resize round-trip.
+        - ``half=True`` (FP16) gives ~2-3x speedup on GPU.
+        - ``verbose=False`` avoids per-frame logging overhead.
+        """
+        if self.model is None:
+            raise ValueError("No model loaded")
+
+        args = self._build_predict_args(**kwargs)
+        args = self._inject_perf_args(args)
+
+        results = self.model.predict(source=frame, **args)
+
+        return {
+            "success": True,
+            "results": results,
+        }
+
+    def predict_video(self, video_path: str, output_path: Optional[str] = None, **kwargs) -> dict:
+        """Run inference on a video file."""
+        if self.model is None:
+            raise ValueError("No model loaded")
+
+        args = self._build_predict_args(**kwargs)
+        args = self._inject_perf_args(args)
+
+        if output_path:
+            args["project"] = str(Path(output_path).parent)
+            args["name"] = Path(output_path).stem
+
+        results = self.model.predict(source=video_path, **args)
+        return {"success": True, "results": results}
+
+    def predict_webcam(self, camera_id: int = 0, callback=None, **kwargs):
+        """Run inference on webcam feed."""
+        if self.model is None:
+            raise ValueError("No model loaded")
+
+        cap = cv2.VideoCapture(camera_id)
+        if not cap.isOpened():
+            raise ValueError(f"Cannot open camera {camera_id}")
+
+        self.is_running = True
+        args = self._build_predict_args(**kwargs)
+        args = self._inject_perf_args(args)
+
+        try:
+            while self.is_running:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                results = self.model.predict(source=frame, **args)
+
+                if callback:
+                    annotated = results[0].plot().copy()
+                    callback(annotated, results[0])
+                else:
+                    annotated = results[0].plot().copy()
+                    cv2.imshow("YOLO Inference", annotated)
+                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                        break
+        finally:
+            cap.release()
+            cv2.destroyAllWindows()
+            self.is_running = False
+
+    def stop(self):
+        """Stop webcam inference."""
+        self.is_running = False
+
+    def _build_predict_args(self, **kwargs) -> dict:
+        """Build prediction arguments from config and overrides.
+
+        Field names now match Ultralytics model.predict() API exactly.
+        """
+        args = {}
+
+        if self.config:
+            ic = self.config.inference
+            # Dump all fields; filter out None values (Ultralytics errors on
+            # explicit None — it uses None as "use default internally").
+            dumped = ic.model_dump(exclude_none=False)
+            for key, value in dumped.items():
+                if value is not None:
+                    args[key] = value
+
+        args.update(kwargs)
+        return args
+
+    # ------------------------------------------------------------------
+    # Detection parsing (supports detect / OBB / pose)
+    # ------------------------------------------------------------------
+
+    def get_detections(self, results) -> list[dict]:
+        """Extract detection results into a structured format.
+
+        Supports all YOLO task types:
+        - Detect:  result.boxes  → bbox
+        - OBB:     result.obb   → obb (rotated box with 4 corners)
+        - Pose:    result.boxes + result.keypoints → keypoint
+        """
+        detections = []
+        for result in results:
+            # --- OBB (Oriented Bounding Box) ---
+            obb = getattr(result, "obb", None)
+            if obb is not None and len(obb) > 0:
+                for i in range(len(obb)):
+                    cls_id = int(obb.cls[i])
+                    det = {
+                        "class_id": cls_id,
+                        "class_name": result.names.get(cls_id, str(cls_id)),
+                        "confidence": float(obb.conf[i]),
+                        "type": "obb",
+                    }
+                    # xywhr format: [cx, cy, w, h, rotation]
+                    if obb.xywhr is not None and len(obb.xywhr[i]) >= 5:
+                        import math
+                        cx, cy, w, h, r = obb.xywhr[i].cpu().numpy().tolist()[:5]
+                        # Convert to 4 corner points
+                        cos_a = math.cos(r)
+                        sin_a = math.sin(r)
+                        corners = []
+                        for dx, dy in [(-w/2, -h/2), (w/2, -h/2), (w/2, h/2), (-w/2, h/2)]:
+                            px = cx + dx * cos_a - dy * sin_a
+                            py = cy + dx * sin_a + dy * cos_a
+                            corners.append((px, py))
+                        det["corners"] = corners
+                        # Also provide xyxy bbox for compatibility
+                        det["bbox"] = {
+                            "x1": float(obb.xyxy[i][0]),
+                            "y1": float(obb.xyxy[i][1]),
+                            "x2": float(obb.xyxy[i][2]),
+                            "y2": float(obb.xyxy[i][3]),
+                        }
+                    detections.append(det)
+                continue  # OBB results are handled, skip boxes
+
+            # --- Keypoint / Pose ---
+            keypoints = getattr(result, "keypoints", None)
+            boxes = result.boxes
+            if keypoints is not None and len(keypoints) > 0 and boxes is not None:
+                for i in range(len(boxes)):
+                    box = boxes[i]
+                    cls_id = int(box.cls[0])
+                    det = {
+                        "class_id": cls_id,
+                        "class_name": result.names.get(cls_id, str(cls_id)),
+                        "confidence": float(box.conf[0]),
+                        "type": "keypoint",
+                        "bbox": {
+                            "x1": float(box.xyxy[0][0]),
+                            "y1": float(box.xyxy[0][1]),
+                            "x2": float(box.xyxy[0][2]),
+                            "y2": float(box.xyxy[0][3]),
+                        },
+                    }
+                    # Extract keypoint data
+                    if hasattr(keypoints, "xy") and keypoints.xy is not None:
+                        kps = keypoints.xy[i].cpu().numpy()  # shape: (num_keypoints, 2)
+                        # Visibility: try keypoints.xyn (normalized) or default to 2 (visible)
+                        vis = None
+                        if hasattr(keypoints, "visible") and keypoints.visible is not None:
+                            vis = keypoints.visible[i].cpu().numpy()  # shape: (num_keypoints,)
+                        det["keypoints"] = []
+                        for ki in range(len(kps)):
+                            kx, ky = float(kps[ki][0]), float(kps[ki][1])
+                            v = int(vis[ki]) if vis is not None and ki < len(vis) else 2
+                            det["keypoints"].append((kx, ky, v))
+                    detections.append(det)
+                continue  # Keypoint results are handled
+
+            # --- Standard Detect (bbox) ---
+            if boxes is not None:
+                for i in range(len(boxes)):
+                    box = boxes[i]
+                    cls_id = int(box.cls[0])
+                    detections.append({
+                        "class_id": cls_id,
+                        "class_name": result.names.get(cls_id, str(cls_id)),
+                        "confidence": float(box.conf[0]),
+                        "type": "bbox",
+                        "bbox": {
+                            "x1": float(box.xyxy[0][0]),
+                            "y1": float(box.xyxy[0][1]),
+                            "x2": float(box.xyxy[0][2]),
+                            "y2": float(box.xyxy[0][3]),
+                        },
+                    })
+        return detections
+
+    def annotate_frame(self, frame: np.ndarray, results, show_labels: bool = True, show_conf: bool = True) -> np.ndarray:
+        """Annotate a frame with detection results."""
+        annotated = results[0].plot(
+            labels=show_labels,
+            conf=show_conf,
+        ).copy()
+        return annotated
+
+    # ------------------------------------------------------------------
+    # Device / performance info
+    # ------------------------------------------------------------------
+
+    def get_device_info(self) -> dict:
+        """Return current device and performance info for UI display."""
+        info = {
+            "device": self._device or "auto",
+            "half": self._half,
+            "imgsz": self._imgsz,
+        }
+        try:
+            import torch
+            if torch.cuda.is_available() and torch.cuda.device_count() > 0:
+                try:
+                    info["gpu_name"] = torch.cuda.get_device_name(0)
+                    info["gpu_memory"] = f"{torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB"
+                    info["cuda_version"] = torch.version.cuda or "N/A"
+                except (AssertionError, RuntimeError):
+                    # CUDA driver present but device inaccessible (e.g. driver mismatch)
+                    info["gpu_name"] = "N/A (CUDA device error)"
+            else:
+                info["gpu_name"] = "N/A (CPU only)"
+        except ImportError:
+            info["gpu_name"] = "N/A (torch not installed)"
+        return info

@@ -1,0 +1,32 @@
+{
+  "_comment": "NVIDIA driver -> CUDA version mapping. Auto-loaded by YOLO Studio.",
+  "_source": "https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/",
+  "_updated": "2026-05-03",
+  "entries": [
+    {"min_driver": "590.00", "cuda_version": "13.0"},
+    {"min_driver": "580.00", "cuda_version": "13.0"},
+    {"min_driver": "570.00", "cuda_version": "12.8"},
+    {"min_driver": "560.35", "cuda_version": "12.6"},
+    {"min_driver": "555.85", "cuda_version": "12.5"},
+    {"min_driver": "550.54", "cuda_version": "12.4"},
+    {"min_driver": "545.84", "cuda_version": "12.3"},
+    {"min_driver": "535.54", "cuda_version": "12.2"},
+    {"min_driver": "530.30", "cuda_version": "12.1"},
+    {"min_driver": "525.60", "cuda_version": "12.0"},
+    {"min_driver": "520.61", "cuda_version": "11.8"},
+    {"min_driver": "515.43", "cuda_version": "11.7"},
+    {"min_driver": "510.39", "cuda_version": "11.6"},
+    {"min_driver": "495.29", "cuda_version": "11.5"},
+    {"min_driver": "470.42", "cuda_version": "11.4"},
+    {"min_driver": "465.19", "cuda_version": "11.3"},
+    {"min_driver": "460.27", "cuda_version": "11.2"},
+    {"min_driver": "455.23", "cuda_version": "11.1"},
+    {"min_driver": "450.36", "cuda_version": "11.0"},
+    {"min_driver": "440.33", "cuda_version": "10.2"},
+    {"min_driver": "418.96", "cuda_version": "10.1"},
+    {"min_driver": "410.48", "cuda_version": "10.0"},
+    {"min_driver": "396.26", "cuda_version": "9.2"},
+    {"min_driver": "384.81", "cuda_version": "9.0"},
+    {"min_driver": "375.26", "cuda_version": "8.0"}
+  ]
+}
