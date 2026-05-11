@@ -6,6 +6,9 @@
 ![Python](https://img.shields.io/badge/Python-3.10+-green.svg)
 ![PyQt6](https://img.shields.io/badge/GUI-PyQt6-orange.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.1+-red.svg)
+![OpenCV](https://img.shields.io/badge/OpenCV-4.8+-purple.svg)
+![Ultralytics](https://img.shields.io/badge/Ultralytics-8.2+-yellow.svg)
 
 **专业的 YOLO 系列模型标注与训练桌面工作台**
 
