@@ -141,6 +141,3 @@ Yolo Studio/
 
 本项目采用 GNU General Public License v3.0 许可证 - 详见 [LICENSE](LICENSE) 文件
 
-## 说明
-
-当前仓库默认包含部分本地模型文件（`*.pt`）。上传 GitHub 前，建议根据仓库体积与发布策略决定是否保留，必要时可通过 `.gitignore` 或 Release 方式管理模型权重。
