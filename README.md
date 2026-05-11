@@ -11,7 +11,7 @@ YOLO Studio 是一个基于 `PyQt6 + Ultralytics` 的桌面端标注与训练工
 - 可扩展模块化结构
 - 面向 YOLO 工作流的高频操作效率
 
-## 📸 功能概览
+## 功能概览
 
 1. 标注工作台  
 支持矩形框、多边形、旋转框、关键点；支持类别管理、文件队列、自动保存、批量自动标注。
@@ -28,25 +28,25 @@ YOLO Studio 是一个基于 `PyQt6 + Ultralytics` 的桌面端标注与训练工
 5. 导出与格式转换  
 支持常见导出路径与 YOLO / VOC / COCO / DOTA 格式转换。
 
-## 🚀 环境要求
+## 环境要求
 
 - Python 3.10+
 - Windows（当前项目主要在 Windows 环境下开发与测试）
 - CUDA 环境（可选，CPU 也可运行）
 
-## 📦 安装
+## 安装
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## ▶️ 运行
+## 运行
 
 ```bash
 python main.py
 ```
 
-## 📁 项目结构
+## 项目结构
 
 ```text
 Yolo Studio/
@@ -58,7 +58,7 @@ Yolo Studio/
 └─ main.py      # 应用入口
 ```
 
-## 🙏 参考与致谢
+## 参考与致谢
 
 本项目在设计和实现过程中参考了以下开源项目与文档。
 
@@ -137,10 +137,10 @@ Yolo Studio/
 - 标注字段定义
 - 不同格式之间的转换约束
 
-## 📄 许可证
+## 许可证
 
 本项目采用 GNU General Public License v3.0 许可证 - 详见 [LICENSE](LICENSE) 文件
 
-## 📝 说明
+## 说明
 
 当前仓库默认包含部分本地模型文件（`*.pt`）。上传 GitHub 前，建议根据仓库体积与发布策略决定是否保留，必要时可通过 `.gitignore` 或 Release 方式管理模型权重。
