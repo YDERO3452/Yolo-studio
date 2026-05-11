@@ -1,50 +1,92 @@
 # YOLO Studio
 
+<div align="center">
+
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.10+-green.svg)
 ![PyQt6](https://img.shields.io/badge/GUI-PyQt6-orange.svg)
+![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)
 
-YOLO Studio 是一个基于 `PyQt6 + Ultralytics` 的桌面端标注与训练工作台，覆盖数据标注、数据集组织、训练、推理与导出流程。
+**专业的 YOLO 系列模型标注与训练桌面工作台**
 
-本项目定位为工程化本地工具，强调：
-- 单机可用
-- 可扩展模块化结构
-- 面向 YOLO 工作流的高频操作效率
+</div>
 
-## 功能概览
+---
 
-1. 标注工作台  
-支持矩形框、多边形、旋转框、关键点；支持类别管理、文件队列、自动保存、批量自动标注。
+## 项目简介
 
-2. 数据集管理  
-支持 YOLO 目录结构管理、`data.yaml` 构建、数据切分与基础检查。
+YOLO Studio 是一个基于 PyQt6 和 Ultralytics YOLO 框架开发的桌面端应用程序，提供完整的目标检测工作流支持，包括数据标注、数据集管理、模型训练、推理测试和格式转换等功能。
 
-3. 训练面板  
-基于 Ultralytics 训练接口，支持常见参数配置、训练日志与状态回传。
+### 核心特性
 
-4. 推理面板  
-支持图片、目录、视频与摄像头推理流程。
+- **本地化部署**：完全离线可用，数据隐私安全
+- **模块化架构**：清晰的代码结构，易于扩展和维护
+- **高效工作流**：针对 YOLO 任务优化的操作流程
+- **多格式支持**：支持 YOLO、VOC、COCO、DOTA 等主流格式
 
-5. 导出与格式转换  
-支持常见导出路径与 YOLO / VOC / COCO / DOTA 格式转换。
+---
+
+## 功能模块
+
+### 1. 标注工作台
+
+- 支持多种标注类型：矩形框、多边形、旋转框、关键点
+- 智能类别管理与颜色配置
+- 文件队列导航与快速切换
+- 自动保存与批量自动标注功能
+
+### 2. 数据集管理
+
+- YOLO 标准目录结构自动生成
+- data.yaml 配置文件构建
+- 训练集/验证集/测试集自动划分
+- 数据集完整性检查
+
+### 3. 训练面板
+
+- 基于 Ultralytics 训练引擎
+- 可视化参数配置界面
+- 实时训练日志与指标监控
+- 训练状态实时反馈
+
+### 4. 推理面板
+
+- 支持单张图片、目录批量、视频文件和摄像头实时推理
+- 多种 YOLO 模型版本支持（YOLOv8、YOLO26）
+- 检测结果可视化与导出
+
+### 5. 导出与格式转换
+
+- 支持 YOLO、Pascal VOC、COCO、DOTA 格式互转
+- 灵活的导出路径配置
+- 批量转换处理
+
+---
 
 ## 环境要求
 
-- Python 3.10+
-- Windows（当前项目主要在 Windows 环境下开发与测试）
-- CUDA 环境（可选，CPU 也可运行）
+- **操作系统**：Windows 10/11
+- **Python 版本**：3.10 或更高版本
+- **GPU 支持**：CUDA 11.x+（可选，CPU 模式也可运行）
+- **内存建议**：8GB RAM 以上
 
-## 安装
+---
+
+## 快速开始
+
+### 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 运行
+### 启动应用
 
 ```bash
 python main.py
 ```
+
+---
 
 ## 项目结构
 
@@ -58,90 +100,77 @@ Yolo Studio/
 └─ main.py      # 应用入口
 ```
 
-## 参考与致谢
+---
 
-本项目在设计和实现过程中参考了以下开源项目与文档。
+## 技术参考
 
-### 1) X-AnyLabeling（重点参考）
+本项目在开发过程中参考了以下优秀开源项目和技术文档：
 
-项目地址：  
-`https://github.com/CVHub520/X-AnyLabeling`
+### X-AnyLabeling
 
-参考点（主要是交互与工程组织思路）：
+- **项目地址**：https://github.com/CVHub520/X-AnyLabeling
+- **参考内容**：标注交互设计、自动标注流程、格式转换架构
 
-- 标注交互细节与操作习惯  
-  参考位置：`gui/class_panel.py`, `gui/canvas.py`
-  - 类别列表交互
-  - 双击编辑标签
-  - 十字辅助线交互
+### Ultralytics YOLO
 
-- 自动标注与批处理组织方式  
-  参考位置：`core/auto_labeling_enhanced.py`, `core/batch_processor.py`
-  - 配置驱动的自动标注流程
-  - 批量任务进度与结果处理
+- **官方文档**：https://docs.ultralytics.com/
+- **参考内容**：训练/推理接口、数据集规范、模型导出
 
-- 格式转换模块组织方式  
-  参考位置：`core/format_converter.py`
-  - 多格式转换入口组织
-  - 转换结果统一封装
+### PyQt6
 
-- 类别与映射管理思路  
-  参考位置：`core/class_manager.py`
-  - 类别持久化
-  - 名称映射管理
+- **官方文档**：https://www.riverbankcomputing.com/static/Docs/PyQt6/
+- **参考内容**：GUI 框架、信号槽机制、自定义控件
 
-说明：本项目为独立实现，以上为设计思路与交互层面的参考来源说明。
+### OpenCV
 
-### 2) Ultralytics YOLO
+- **官方文档**：https://docs.opencv.org/
+- **参考内容**：图像处理、绘制函数、格式转换
 
-文档地址：  
-`https://docs.ultralytics.com/`
+### 数据格式标准
 
-参考点：
-- 训练、推理、导出接口参数命名与使用方式
-- YOLO 数据集目录约定与标注格式约定
+- **COCO**：https://cocodataset.org/
+- **Pascal VOC**：http://host.robots.ox.ac.uk/pascal/VOC/
+- **DOTA**：https://captain-whu.github.io/DOTA/
 
-相关实现位置：  
-`core/config.py`, `core/trainer.py`, `core/inference.py`, `gui/annotation_io.py`, `core/dataset.py`
-
-### 3) PyQt6 / Qt
-
-参考文档：  
-- `https://www.riverbankcomputing.com/static/Docs/PyQt6/`  
-- `https://doc.qt.io/qt-6/`
-
-参考点：
-- 信号槽机制
-- 自定义绘制与控件布局
-- 主题样式组织
-
-### 4) OpenCV
-
-文档地址：  
-`https://docs.opencv.org/`
-
-参考点：
-- 图像读写与处理
-- 绘制与转换辅助
-
-相关实现位置：  
-`gui/canvas.py`, `core/annotation.py`
-
-### 5) 数据格式标准
-
-- COCO: `https://cocodataset.org/`  
-- Pascal VOC: `http://host.robots.ox.ac.uk/pascal/VOC/`  
-- DOTA: `https://captain-whu.github.io/DOTA/`
-
-参考点：
-- 标注字段定义
-- 不同格式之间的转换约束
+---
 
 ## 许可证
 
-本项目采用 GNU General Public License v3.0 许可证 - 详见 [LICENSE](LICENSE) 文件
+本项目采用 GNU General Public License v3.0 开源许可证。
 
-## CUDA 安装教程
+详细信息请参阅 [LICENSE](LICENSE) 文件。
+
+---
+
+<div align="center">
+
+**如有问题或建议，欢迎提交 Issue 或 Pull Request**
+
+</div>
+
+---
+
+## 模型下载
+
+由于模型文件较大，已从代码仓库中移除。请从 [Releases](https://github.com/YDERO3452/Yolo-studio/releases) 页面下载所需模型文件。
+
+### 可用模型列表
+
+| 模型名称 | 文件大小 | 用途 |
+|---------|---------|------|
+| yolo26n.pt | 5.4 MB | YOLO26 Nano 目标检测 |
+| yolo26s.pt | 19.9 MB | YOLO26 Small 目标检测 |
+| yolo26n-seg.pt | 6.6 MB | YOLO26 Nano 实例分割 |
+| yolo26n-pose.pt | 7.7 MB | YOLO26 Nano 姿态估计 |
+| yolo26n-obb.pt | 5.8 MB | YOLO26 Nano 旋转框检测 |
+| yolov8n.pt | 6.4 MB | YOLOv8 Nano 目标检测 |
+| yolov8m.pt | 50.9 MB | YOLOv8 Medium 目标检测 |
+
+下载后将所有 `.pt` 文件放置到项目根目录即可使用。
+
+---
+
+## CUDA 安装指南
 
 ![CUDA安装步骤](教程/1.png)
 ![CUDA安装步骤](教程/2.png)
