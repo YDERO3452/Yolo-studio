@@ -170,7 +170,7 @@ Yolo Studio/
 | yolov8m.pt | 50.9 MB | YOLOv8 Medium 目标检测 |
 
 下载后将所有 `.pt` 文件放置到项目根目录即可使用。
-
+Todo：下一步准备集成Meta的SAM3模型，用于自动标注！
 ---
 
 ## CUDA 安装指南
