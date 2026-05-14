@@ -3298,6 +3298,32 @@ class MainWindow(QMainWindow):
 
         llm_config = load_llm_config()
 
+        # Preset selector
+        preset_row = QHBoxLayout()
+        preset_label = QLabel("API 预设:")
+        preset_combo = QComboBox()
+        preset_combo.addItems(["自定义", "阿里云通义千问", "DeepSeek", "Ollama (本地)"])
+        preset_map = {
+            "阿里云通义千问": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-vl-max"),
+            "DeepSeek": ("https://api.deepseek.com/v1", "deepseek-chat"),
+            "Ollama (本地)": ("http://localhost:11434/v1", "llava"),
+        }
+        
+        # Detect current preset
+        current_base = llm_config.get("base_url", "")
+        current_model = llm_config.get("model_name", "")
+        selected_preset = "自定义"
+        for name, (base, model) in preset_map.items():
+            if current_base == base and current_model == model:
+                selected_preset = name
+                break
+        preset_combo.setCurrentText(selected_preset)
+        
+        preset_row.addWidget(preset_label)
+        preset_row.addWidget(preset_combo)
+        preset_row.addStretch()
+        layout.addLayout(preset_row)
+
         form = QFormLayout()
         api_key_edit = QLineEdit(llm_config.get("api_key", ""))
         api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -3308,6 +3334,15 @@ class MainWindow(QMainWindow):
 
         model_name_edit = QLineEdit(llm_config.get("model_name", "qwen-vl-max"))
         form.addRow("模型名称:", model_name_edit)
+
+        def on_preset_changed(index):
+            text = preset_combo.currentText()
+            if text in preset_map:
+                base, model = preset_map[text]
+                base_url_edit.setText(base)
+                model_name_edit.setText(model)
+        
+        preset_combo.currentIndexChanged.connect(on_preset_changed)
 
         sys_prompt_edit = QTextEdit()
         sys_prompt_edit.setPlainText(llm_config.get("system_prompt", ""))
