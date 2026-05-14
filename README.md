@@ -123,6 +123,7 @@ Yolo Studio/
 
 - **项目地址**：https://github.com/facebookresearch/segment-anything
 - **参考内容**：交互式图像分割、提示工程
+- **已集成**：SAM2/SAM3 动态记忆标注
 
 ### PyQt6
 
