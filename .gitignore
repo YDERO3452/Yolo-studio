@@ -9,6 +9,9 @@ env/
 
 logs/
 runs/
+projects/
+EzYOLO/
+config/llm_config.json
 
 .DS_Store
 Thumbs.db

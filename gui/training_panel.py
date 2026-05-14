@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QSpinBox, QDoubleSpinBox, QPushButton, QLineEdit,
     QTextEdit, QProgressBar, QFileDialog, QCheckBox, QScrollArea,
     QFormLayout, QTabWidget, QMessageBox, QSplitter, QDialog,
-    QDialogButtonBox
+    QDialogButtonBox, QInputDialog
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer
 from PyQt6.QtGui import QFont
@@ -550,6 +550,34 @@ class TrainingPanel(QWidget):
 
         save_group.setLayout(save_layout)
 
+        # Training templates
+        template_group = QGroupBox("训练模板")
+        template_layout = QVBoxLayout()
+
+        template_btn_row = QHBoxLayout()
+        self.template_combo = QComboBox()
+        self.template_combo.setMinimumWidth(160)
+        self._load_template_list()
+        template_btn_row.addWidget(self.template_combo, 1)
+
+        self.save_template_btn = QPushButton("保存")
+        self.save_template_btn.setFixedWidth(52)
+        self.save_template_btn.clicked.connect(self._save_template)
+        template_btn_row.addWidget(self.save_template_btn)
+
+        self.load_template_btn = QPushButton("加载")
+        self.load_template_btn.setFixedWidth(52)
+        self.load_template_btn.clicked.connect(self._load_template)
+        template_btn_row.addWidget(self.load_template_btn)
+
+        self.delete_template_btn = QPushButton("删除")
+        self.delete_template_btn.setFixedWidth(52)
+        self.delete_template_btn.clicked.connect(self._delete_template)
+        template_btn_row.addWidget(self.delete_template_btn)
+
+        template_layout.addLayout(template_btn_row)
+        template_group.setLayout(template_layout)
+
         # Training parameters
         params_group = QGroupBox("训练参数")
         params_layout = QFormLayout()
@@ -663,6 +691,7 @@ class TrainingPanel(QWidget):
         setup_layout.addWidget(data_group)
         setup_layout.addWidget(device_group)
         setup_layout.addWidget(save_group)
+        setup_layout.addWidget(template_group)
         setup_layout.addStretch()
         settings_tabs.addTab(setup_tab, "运行设置")
 
@@ -1106,3 +1135,169 @@ class TrainingPanel(QWidget):
                     return
 
         QMessageBox.information(self, "提示", f"未找到训练结果。\n已搜索: {', '.join(candidates)}")
+
+    # ------------------------------------------------------------------
+    # Training templates
+    # ------------------------------------------------------------------
+
+    def _template_key(self) -> str:
+        return "training_templates"
+
+    def _load_template_list(self):
+        """Populate template combo with saved template names."""
+        current = self.template_combo.currentText() if hasattr(self, "template_combo") else ""
+        self.template_combo.clear()
+        from PyQt6.QtCore import QSettings
+        settings = QSettings("YOLOStudio", "TrainingTemplates")
+        templates = settings.value(self._template_key(), [])
+        if not isinstance(templates, list):
+            templates = []
+        for name in sorted({str(name) for name in templates if str(name).strip()}):
+            if isinstance(name, str):
+                self.template_combo.addItem(name)
+        if current:
+            self.template_combo.setCurrentText(current)
+
+    def _save_template(self):
+        """Save current training configuration as a named template."""
+        name, ok = QInputDialog.getText(self, "保存模板", "模板名称:")
+        if not ok or not name.strip():
+            return
+        name = name.strip()
+
+        from PyQt6.QtCore import QSettings
+        settings = QSettings("YOLOStudio", "TrainingTemplates")
+        template_names = settings.value(self._template_key(), []) or []
+        if not isinstance(template_names, list):
+            template_names = []
+
+        template_data = {
+            "model_series": self.model_series_combo.currentIndex(),
+            "model": self._get_selected_model(),
+            "data_yaml": self.data_yaml_edit.text(),
+            "device": self.device_combo.currentData() or self.device_combo.currentText(),
+            "project": self.project_edit.text(),
+            "name": self.name_edit.text(),
+            "exist_ok": self.exist_ok_check.isChecked(),
+            "epochs": self.epochs_spin.value(),
+            "batch": self.batch_spin.value(),
+            "imgsz": self.imgsz_spin.value(),
+            "workers": self.workers_spin.value(),
+            "patience": self.patience_spin.value(),
+            "optimizer": self.optimizer_combo.currentIndex(),
+            "lr0": self.lr0_spin.value(),
+            "momentum": self.momentum_spin.value(),
+            "weight_decay": self.weight_decay_spin.value(),
+            "fliplr": self.fliplr_spin.value(),
+            "mosaic": self.mosaic_spin.value(),
+            "hsv_h": self.hsv_h_spin.value(),
+            "hsv_s": self.hsv_s_spin.value(),
+            "degrees": self.degrees_spin.value(),
+            "scale": self.scale_spin.value(),
+        }
+
+        template_data["_name"] = name
+        cleaned_names = [str(item) for item in template_names if str(item).strip() and str(item) != name]
+        cleaned_names.append(name)
+        settings.setValue(self._template_key(), cleaned_names)
+        settings.setValue(f"template_{name}", template_data)
+
+        settings.sync()
+        self._load_template_list()
+        self.template_combo.setCurrentText(name)
+        self.log_text.append(f"模板已保存: {name}")
+
+    def _load_template(self):
+        """Load selected template into the UI."""
+        name = self.template_combo.currentText()
+        if not name:
+            return
+
+        from PyQt6.QtCore import QSettings
+        settings = QSettings("YOLOStudio", "TrainingTemplates")
+        template = settings.value(f"template_{name}")
+        if not template or not isinstance(template, dict):
+            QMessageBox.warning(self, "提示", f"模板 '{name}' 数据无效")
+            return
+
+        # Restore values
+        if "model_series" in template:
+            idx = int(template["model_series"])
+            if 0 <= idx < self.model_series_combo.count():
+                self.model_series_combo.setCurrentIndex(idx)
+        if "model" in template:
+            self.model_combo.setCurrentText(str(template["model"]))
+        if "data_yaml" in template:
+            self.data_yaml_edit.setText(str(template["data_yaml"]))
+        if "device" in template:
+            dev = str(template["device"])
+            for i in range(self.device_combo.count()):
+                if self.device_combo.itemData(i) == dev or self.device_combo.itemText(i) == dev:
+                    self.device_combo.setCurrentIndex(i)
+                    break
+            else:
+                self.device_combo.setCurrentText(dev)
+        if "project" in template:
+            self.project_edit.setText(str(template["project"]))
+        if "name" in template:
+            self.name_edit.setText(str(template["name"]))
+        if "exist_ok" in template:
+            self.exist_ok_check.setChecked(bool(template["exist_ok"]))
+        if "epochs" in template:
+            self.epochs_spin.setValue(int(template["epochs"]))
+        if "batch" in template:
+            self.batch_spin.setValue(int(template["batch"]))
+        if "imgsz" in template:
+            self.imgsz_spin.setValue(int(template["imgsz"]))
+        if "workers" in template:
+            self.workers_spin.setValue(int(template["workers"]))
+        if "patience" in template:
+            self.patience_spin.setValue(int(template["patience"]))
+        if "optimizer" in template:
+            oidx = int(template["optimizer"])
+            if 0 <= oidx < self.optimizer_combo.count():
+                self.optimizer_combo.setCurrentIndex(oidx)
+        if "lr0" in template:
+            self.lr0_spin.setValue(float(template["lr0"]))
+        if "momentum" in template:
+            self.momentum_spin.setValue(float(template["momentum"]))
+        if "weight_decay" in template:
+            self.weight_decay_spin.setValue(float(template["weight_decay"]))
+        if "fliplr" in template:
+            self.fliplr_spin.setValue(float(template["fliplr"]))
+        if "mosaic" in template:
+            self.mosaic_spin.setValue(float(template["mosaic"]))
+        if "hsv_h" in template:
+            self.hsv_h_spin.setValue(float(template["hsv_h"]))
+        if "hsv_s" in template:
+            self.hsv_s_spin.setValue(float(template["hsv_s"]))
+        if "degrees" in template:
+            self.degrees_spin.setValue(float(template["degrees"]))
+        if "scale" in template:
+            self.scale_spin.setValue(float(template["scale"]))
+
+        self.log_text.append(f"模板已加载: {name}")
+
+    def _delete_template(self):
+        """Delete the selected template."""
+        name = self.template_combo.currentText()
+        if not name:
+            return
+
+        reply = QMessageBox.question(
+            self, "删除模板", f"确定删除模板 '{name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        from PyQt6.QtCore import QSettings
+        settings = QSettings("YOLOStudio", "TrainingTemplates")
+        saved = settings.value(self._template_key(), []) or []
+        if isinstance(saved, list):
+            saved = [str(t) for t in saved if str(t) != name]
+            settings.setValue(self._template_key(), saved)
+        settings.remove(f"template_{name}")
+        settings.sync()
+        self._load_template_list()
+        self.log_text.append(f"模板已删除: {name}")

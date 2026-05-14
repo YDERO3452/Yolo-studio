@@ -12,7 +12,9 @@ import traceback
 from pathlib import Path
 from typing import List, Optional
 
-from PyQt6.QtCore import QObject, QEvent, QSize, Qt, QThread, pyqtSignal
+import cv2
+import numpy as np
+from PyQt6.QtCore import QObject, QEvent, QPoint, QSize, Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QAction, QColor, QFont, QIcon, QImageReader, QKeySequence, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
@@ -20,8 +22,10 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
+    QFormLayout,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -31,14 +35,17 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
+    QProgressDialog,
     QPushButton,
     QScrollArea,
     QSizePolicy,
     QSpinBox,
     QStackedWidget,
     QTabWidget,
+    QTextEdit,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -51,6 +58,7 @@ from core.class_manager import ClassManager
 from core.config import ConfigManager
 from core.dataset import DatasetManager
 from core.model_manager import ModelManager
+from core.project_manager import ProjectManager
 from gui.advanced_features_panel import AdvancedFeaturesPanel
 from gui.annotation_io import (
     label_path_for_image,
@@ -64,10 +72,24 @@ from gui.class_panel import ClassListPanel
 from gui.dataset_panel import DatasetPanel
 from gui.export_panel import ExportPanel
 from gui.inference_panel import InferencePanel
+from gui.project_panel import ProjectPanel
+from gui.sam_memory_dialog import SAMMemoryObjectsDialog
 from gui.theme import Theme, build_stylesheet
 from gui.training_panel import TrainingPanel
+from gui.training_results_panel import TrainingResultsPanel
 from gui.ui_components import Card, SectionTitle, StatusPill
 from gui.workflow_optimization_panel import WorkflowOptimizationPanel
+from gui.sam_handler import (
+    SAMMemoryPredictorManager,
+    SAMModelManager,
+    SAMInferenceWorker,
+    mask_to_bbox,
+    mask_to_polygon,
+    memory_results_empty,
+    load_sam_config,
+    save_sam_config,
+)
+from gui.llm_handler import LLMBatchInferenceWorker, LLMInferenceWorker, load_llm_config, save_llm_config
 
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
@@ -238,6 +260,7 @@ class MainWindow(QMainWindow):
 
         self.current_image_path: Optional[str] = None
         self.current_image_dir: Optional[str] = None
+        self.current_project: Optional[dict] = None
         self.image_list: List[str] = []
         self.current_image_index = -1
         self._yolo_label_thread: Optional[QThread] = None
@@ -248,12 +271,25 @@ class MainWindow(QMainWindow):
         self._offered_training_for_yaml: Optional[str] = None
         self._yolo_tools_dialog: Optional[QDialog] = None
         self.prompt_for_class_after_draw = True
+        self._sam_manager = None
+        self._sam_worker = None
+        self._llm_worker = None
+        self._llm_batch_worker = None
+        self._llm_progress_dialog = None
+        self._llm_batch_class_id = 0
+        self._llm_batch_class_name = ""
+        self.sam_memory_objects: list[dict] = []
+        self.sam_memory_dialog: Optional[SAMMemoryObjectsDialog] = None
+        self._sam_memory_collecting = False
+        self._sam_memory_pending_points: list[tuple[int, int]] = []
+        self._sam_memory_pending_box: Optional[tuple[int, int, int, int]] = None
 
         self._build_ui()
         self._init_menus()
         self._init_statusbar()
         self._connect_signals()
         self._apply_theme()
+        self._show_launch_page()
         self._update_status()
         self._update_workspace_summary()
 
@@ -274,9 +310,24 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        central = QWidget()
-        self.setCentralWidget(central)
-        root = QHBoxLayout(central)
+        self.app_stack = QStackedWidget()
+        self.setCentralWidget(self.app_stack)
+
+        self.project_panel = ProjectPanel(self.class_manager, parent=self)
+
+        self.launch_page = QWidget()
+        launch_layout = QVBoxLayout(self.launch_page)
+        launch_layout.setContentsMargins(0, 0, 0, 0)
+        launch_layout.setSpacing(0)
+        self.launch_project_host = QWidget()
+        launch_host_layout = QVBoxLayout(self.launch_project_host)
+        launch_host_layout.setContentsMargins(0, 0, 0, 0)
+        launch_host_layout.setSpacing(0)
+        launch_layout.addWidget(self.launch_project_host)
+        self.app_stack.addWidget(self.launch_page)
+
+        self.workbench_page = QWidget()
+        root = QHBoxLayout(self.workbench_page)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
@@ -288,6 +339,11 @@ class MainWindow(QMainWindow):
         self.dataset_panel = DatasetPanel(config_manager=self.config_manager, parent=self)
         self.export_panel = ExportPanel(config_manager=self.config_manager, parent=self)
         self.quality_panel = self._create_quality_workspace()
+        self.results_panel = TrainingResultsPanel(parent=self)
+        self.project_workspace_host = QWidget()
+        project_host_layout = QVBoxLayout(self.project_workspace_host)
+        project_host_layout.setContentsMargins(0, 0, 0, 0)
+        project_host_layout.setSpacing(0)
 
         self.workspace_stack.addWidget(
             self._wrap_workspace(
@@ -324,10 +380,61 @@ class MainWindow(QMainWindow):
                 self.quality_panel,
             )
         )
-        root.addWidget(self._create_nav_rail())
+        self.workspace_stack.addWidget(
+            self._wrap_workspace(
+                "项目",
+                "按项目管理图片、标签、类别、data.yaml 和训练输出。",
+                self.project_workspace_host,
+            )
+        )
+        self.workspace_stack.addWidget(
+            self._wrap_workspace(
+                "训练结果",
+                "浏览训练产物，直接送到推理或导出流程。",
+                self.results_panel,
+            )
+        )
+        self.nav_rail = self._create_nav_rail()
+        root.addWidget(self.nav_rail)
         root.addWidget(self.workspace_stack, stretch=1)
+        self.app_stack.addWidget(self.workbench_page)
+        self._move_project_panel_to(self.launch_project_host)
+        self.app_stack.setCurrentWidget(self.launch_page)
+        self.workspace_stack.setCurrentIndex(6)
+        if hasattr(self, "annotation_tools_container"):
+            self.annotation_tools_container.setVisible(False)
+        self._update_project_gate()
 
         self.training_panel.model_ready.connect(self._on_trained_model_ready)
+
+    def _move_project_panel_to(self, host: QWidget) -> None:
+        old_parent = self.project_panel.parentWidget()
+        if old_parent is host:
+            return
+        if old_parent is not None and old_parent.layout() is not None:
+            old_parent.layout().removeWidget(self.project_panel)
+        layout = host.layout()
+        if layout is None:
+            layout = QVBoxLayout(host)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+        layout.addWidget(self.project_panel)
+
+    def _show_launch_page(self) -> None:
+        if not hasattr(self, "app_stack"):
+            return
+        self._move_project_panel_to(self.launch_project_host)
+        self.app_stack.setCurrentWidget(self.launch_page)
+        self.menuBar().setVisible(False)
+        self.statusBar().setVisible(False)
+
+    def _show_workbench_page(self) -> None:
+        if not hasattr(self, "app_stack"):
+            return
+        self._move_project_panel_to(self.project_workspace_host)
+        self.app_stack.setCurrentWidget(self.workbench_page)
+        self.menuBar().setVisible(True)
+        self.statusBar().setVisible(True)
 
     def _create_nav_rail(self) -> QWidget:
         rail = QWidget()
@@ -341,9 +448,11 @@ class MainWindow(QMainWindow):
         self.workspace_tab_group.setExclusive(True)
         self.workspace_tab_buttons: dict[int, QPushButton] = {}
         for icon_name, index, tip in [
+            ("ws_project", 6, "项目"),
             ("ws_annotate", 0, "标注"),
             ("ws_dataset", 3, "数据集"),
             ("ws_train", 1, "训练"),
+            ("ws_results", 7, "训练结果"),
             ("ws_infer", 2, "推理"),
             ("ws_export", 4, "导出"),
             ("ws_qa", 5, "质检"),
@@ -359,7 +468,7 @@ class MainWindow(QMainWindow):
             self.workspace_tab_group.addButton(btn, index)
             self.workspace_tab_buttons[index] = btn
             layout.addWidget(btn)
-        self.workspace_tab_buttons[0].setChecked(True)
+        self.workspace_tab_buttons[6].setChecked(True)
 
         # Separator between workspace nav and annotation tools
         sep = QWidget()
@@ -396,6 +505,24 @@ class MainWindow(QMainWindow):
             self.mode_group.addButton(btn)
             self.mode_actions[mode] = btn
             tools_layout.addWidget(btn)
+
+        # SAM interactive mode toggle
+        sep2 = QWidget()
+        sep2.setFixedHeight(1)
+        sep2.setStyleSheet(f"background: {Theme.BORDER};")
+        tools_layout.addSpacing(4)
+        tools_layout.addWidget(sep2)
+        tools_layout.addSpacing(4)
+
+        self.sam_tool_btn = QPushButton()
+        self.sam_tool_btn.setObjectName("ToolButton")
+        self.sam_tool_btn.setCheckable(True)
+        self.sam_tool_btn.setToolTip("SAM 交互式标注 (点击启用后，在画布上左键点选/右键框选)")
+        self.sam_tool_btn.setFixedSize(34, 34)
+        self.sam_tool_btn.setText("S")
+        self.sam_tool_btn.setIconSize(QSize(22, 22))
+        self.sam_tool_btn.clicked.connect(self._toggle_sam_mode)
+        tools_layout.addWidget(self.sam_tool_btn)
 
         tools_layout.addSpacing(10)
         fit_btn = QPushButton()
@@ -723,58 +850,73 @@ class MainWindow(QMainWindow):
     def _create_annotation_control_bar_v2(self) -> QWidget:
         header = QWidget()
         header.setObjectName("AnnotationControlBar")
-        header.setFixedHeight(72)
+        header.setFixedHeight(96)
         layout = QVBoxLayout(header)
         layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(0)
+        layout.setSpacing(6)
 
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(7)
-        layout.addLayout(row)
+        model_row = QHBoxLayout()
+        model_row.setContentsMargins(0, 0, 0, 0)
+        model_row.setSpacing(7)
+        layout.addLayout(model_row)
 
-        row.addWidget(QLabel("模型"))
+        model_row.addWidget(QLabel("模型"))
         self.yolo_model_combo = QComboBox()
         self.yolo_model_combo.setEditable(True)
-        self.yolo_model_combo.setMinimumWidth(220)
-        self.yolo_model_combo.setMaximumWidth(460)
+        self.yolo_model_combo.setMinimumWidth(180)
+        self.yolo_model_combo.setMaximumWidth(520)
         self.yolo_model_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._populate_yolo_models()
-        row.addWidget(self.yolo_model_combo, stretch=1)
+        model_row.addWidget(self.yolo_model_combo, stretch=1)
 
         browse_btn = QPushButton("浏览...")
         browse_btn.setFixedWidth(58)
         browse_btn.clicked.connect(self._browse_yolo_model)
-        row.addWidget(browse_btn)
+        model_row.addWidget(browse_btn)
 
         self.yolo_load_btn = QPushButton("加载")
         self.yolo_load_btn.setFixedWidth(52)
         self.yolo_load_btn.clicked.connect(self._load_yolo_model)
-        row.addWidget(self.yolo_load_btn)
+        model_row.addWidget(self.yolo_load_btn)
 
         self.yolo_status_label = QLabel("未加载")
         self.yolo_status_label.setObjectName("InlineStatus")
         self.yolo_status_label.setMinimumWidth(64)
         self.yolo_status_label.setMaximumWidth(140)
         self.yolo_status_label.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-        row.addWidget(self.yolo_status_label)
+        model_row.addWidget(self.yolo_status_label)
 
-        row.addSpacing(6)
-        row.addWidget(QLabel("置信"))
+        model_row.addStretch(1)
+        open_btn = QPushButton("打开文件夹")
+        open_btn.setMinimumWidth(92)
+        open_btn.clicked.connect(self._open_image_dir)
+        save_btn = QPushButton("保存")
+        save_btn.setMinimumWidth(56)
+        save_btn.setObjectName("PrimaryButton")
+        save_btn.clicked.connect(self._save_annotations)
+        model_row.addWidget(open_btn)
+        model_row.addWidget(save_btn)
+
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(7)
+        layout.addLayout(action_row)
+
+        action_row.addWidget(QLabel("置信"))
         self.yolo_conf_spin = QDoubleSpinBox()
         self.yolo_conf_spin.setRange(0.01, 1.0)
         self.yolo_conf_spin.setValue(float(self.config_manager.get("inference", "conf", 0.25)))
         self.yolo_conf_spin.setSingleStep(0.05)
         self.yolo_conf_spin.setFixedWidth(72)
-        row.addWidget(self.yolo_conf_spin)
+        action_row.addWidget(self.yolo_conf_spin)
 
-        row.addWidget(QLabel("IOU"))
+        action_row.addWidget(QLabel("IOU"))
         self.yolo_iou_spin = QDoubleSpinBox()
         self.yolo_iou_spin.setRange(0.01, 1.0)
         self.yolo_iou_spin.setValue(float(self.config_manager.get("inference", "iou", 0.45)))
         self.yolo_iou_spin.setSingleStep(0.05)
         self.yolo_iou_spin.setFixedWidth(72)
-        row.addWidget(self.yolo_iou_spin)
+        action_row.addWidget(self.yolo_iou_spin)
 
         self.yolo_max_det_spin = QSpinBox()
         self.yolo_max_det_spin.setRange(1, 3000)
@@ -783,7 +925,7 @@ class MainWindow(QMainWindow):
 
         self.yolo_replace_check = QCheckBox("覆盖")
         self.yolo_replace_check.setToolTip("开启后自动标注会替换旧标注")
-        row.addWidget(self.yolo_replace_check)
+        action_row.addWidget(self.yolo_replace_check)
 
         self.yolo_model_class_check = QCheckBox("模型类别(中文)")
         self.yolo_model_class_check.setChecked(True)
@@ -794,31 +936,62 @@ class MainWindow(QMainWindow):
         self.yolo_current_btn.setObjectName("PrimaryButton")
         self.yolo_current_btn.setMinimumWidth(80)
         self.yolo_current_btn.clicked.connect(self._run_yolo_auto_label_current)
-        row.addWidget(self.yolo_current_btn)
+        action_row.addWidget(self.yolo_current_btn)
 
         self.yolo_all_btn = QPushButton("标注全部")
         self.yolo_all_btn.setMinimumWidth(80)
         self.yolo_all_btn.clicked.connect(self._run_yolo_auto_label_all)
-        row.addWidget(self.yolo_all_btn)
+        action_row.addWidget(self.yolo_all_btn)
 
         self.yolo_progress_bar = QProgressBar()
         self.yolo_progress_bar.setRange(0, 100)
         self.yolo_progress_bar.setValue(0)
         self.yolo_progress_bar.setFixedWidth(96)
         self.yolo_progress_bar.setFixedHeight(24)
-        row.addWidget(self.yolo_progress_bar)
+        action_row.addWidget(self.yolo_progress_bar)
 
-        row.addStretch(1)
+        action_row.addStretch(1)
 
-        open_btn = QPushButton("打开文件夹")
-        open_btn.setMinimumWidth(92)
-        open_btn.clicked.connect(self._open_image_dir)
-        save_btn = QPushButton("保存")
-        save_btn.setMinimumWidth(56)
-        save_btn.setObjectName("PrimaryButton")
-        save_btn.clicked.connect(self._save_annotations)
-        row.addWidget(open_btn)
-        row.addWidget(save_btn)
+        # SAM / LLM / negative sample buttons
+        self.sam_config_btn = QPushButton("SAM")
+        self.sam_config_btn.setObjectName("SecondaryButton")
+        self.sam_config_btn.setMinimumWidth(52)
+        self.sam_config_btn.setToolTip("SAM 自动标注配置")
+        self.sam_config_btn.clicked.connect(self._show_auto_label_dialog_sam)
+        action_row.addWidget(self.sam_config_btn)
+
+        self.sam_memory_btn = QPushButton("记忆")
+        self.sam_memory_btn.setObjectName("SecondaryButton")
+        self.sam_memory_btn.setMinimumWidth(52)
+        self.sam_memory_btn.setToolTip("SAM2/SAM3 记忆标注")
+        memory_menu = QMenu(self.sam_memory_btn)
+        memory_menu.addAction("更新记忆", self.start_sam_memory_update)
+        memory_menu.addAction("单张推理", self.run_sam_memory_single)
+        memory_menu.addAction("批量推理", self.run_sam_memory_batch)
+        memory_menu.addSeparator()
+        memory_menu.addAction("清空记忆", self.clear_sam_memory)
+        self.sam_memory_btn.setMenu(memory_menu)
+        action_row.addWidget(self.sam_memory_btn)
+
+        self.llm_btn = QPushButton("LLM")
+        self.llm_btn.setObjectName("SecondaryButton")
+        self.llm_btn.setMinimumWidth(52)
+        self.llm_btn.setToolTip("LLM 自动标注")
+        llm_menu = QMenu(self.llm_btn)
+        llm_menu.addAction("单张推理", self._run_llm_auto_label)
+        llm_menu.addAction("批量推理", self._run_llm_auto_label_batch)
+        llm_menu.addSeparator()
+        llm_menu.addAction("设置", self._show_auto_label_dialog_llm)
+        self.llm_btn.setMenu(llm_menu)
+        action_row.addWidget(self.llm_btn)
+
+        self.negative_btn = QPushButton("无框")
+        self.negative_btn.setObjectName("SecondaryButton")
+        self.negative_btn.setCheckable(True)
+        self.negative_btn.setMinimumWidth(52)
+        self.negative_btn.setToolTip("标记当前图片为无目标(负样本)")
+        self.negative_btn.toggled.connect(self._toggle_negative_sample)
+        action_row.addWidget(self.negative_btn)
 
         return header
 
@@ -1151,6 +1324,8 @@ class MainWindow(QMainWindow):
     def _find_workspace_model_files(self) -> list[str]:
         model_files: list[str] = []
         roots = [Path.cwd(), Path.cwd() / "models"]
+        if self.current_project and self.current_project.get("root"):
+            roots.insert(0, Path(self.current_project["root"]) / "models")
         for root in roots:
             if not root.exists():
                 continue
@@ -1160,15 +1335,19 @@ class MainWindow(QMainWindow):
 
     def _find_recent_yolo_weights(self) -> list[str]:
         weights: list[str] = []
-        runs_dir = Path.cwd() / "runs"
-        if not runs_dir.exists():
-            return weights
-        for path in runs_dir.rglob("weights/best.pt"):
-            if path.is_file():
-                weights.append(str(path))
-        for path in runs_dir.rglob("weights/last.pt"):
-            if path.is_file():
-                weights.append(str(path))
+        roots = []
+        if self.current_project and self.current_project.get("root"):
+            roots.append(Path(self.current_project["root"]) / "runs")
+        roots.append(Path.cwd() / "runs")
+        for runs_dir in roots:
+            if not runs_dir.exists():
+                continue
+            for path in runs_dir.rglob("weights/best.pt"):
+                if path.is_file():
+                    weights.append(str(path))
+            for path in runs_dir.rglob("weights/last.pt"):
+                if path.is_file():
+                    weights.append(str(path))
         return sorted(set(weights), key=lambda path: os.path.getmtime(path), reverse=True)[:20]
 
     # ------------------------------------------------------------------
@@ -1178,32 +1357,34 @@ class MainWindow(QMainWindow):
     def _init_menus(self) -> None:
         menubar = self.menuBar()
         self.workspace_actions: dict = {}
+        self.project_required_actions: list[QAction] = []
 
         file_menu = menubar.addMenu("文件")
-        self._add_action(file_menu, "打开目录", self._open_image_dir, "Ctrl+O")
-        self._add_action(file_menu, "打开图片", self._open_single_image, "Ctrl+I")
+        self.project_required_actions.append(self._add_action(file_menu, "打开目录", self._open_image_dir, "Ctrl+O"))
+        self.project_required_actions.append(self._add_action(file_menu, "打开图片", self._open_single_image, "Ctrl+I"))
         file_menu.addSeparator()
-        self._add_action(file_menu, "保存", self._save_annotations, "Ctrl+S")
+        self.project_required_actions.append(self._add_action(file_menu, "保存", self._save_annotations, "Ctrl+S"))
         file_menu.addSeparator()
         self._add_action(file_menu, "退出", self.close, "Ctrl+Q")
 
         edit_menu = menubar.addMenu("编辑")
-        self._add_action(edit_menu, "撤销", self.canvas.undo, "Ctrl+Z")
-        self._add_action(edit_menu, "重做", self.canvas.redo, "Ctrl+Y")
+        self.project_required_actions.append(self._add_action(edit_menu, "撤销", self.canvas.undo, "Ctrl+Z"))
+        self.project_required_actions.append(self._add_action(edit_menu, "重做", self.canvas.redo, "Ctrl+Y"))
         edit_menu.addSeparator()
-        self._add_action(edit_menu, "删除", self._delete_selected_shape, "Delete")
-        self._add_action(edit_menu, "清空全部", self._clear_shapes)
+        self.project_required_actions.append(self._add_action(edit_menu, "删除", self._delete_selected_shape, "Delete"))
+        self.project_required_actions.append(self._add_action(edit_menu, "清空全部", self._clear_shapes))
 
         view_menu = menubar.addMenu("视图")
-        self._add_action(view_menu, "适配窗口", self.canvas.fit_to_window, "Ctrl+F")
+        self.project_required_actions.append(self._add_action(view_menu, "适配窗口", self.canvas.fit_to_window, "Ctrl+F"))
 
         help_menu = menubar.addMenu("帮助")
         self._add_action(help_menu, "关于", self._show_about)
 
-        self._add_action(menubar, "自动标注", self._focus_auto_labeling_panel)
-        self._add_action(menubar, "视频截帧", self._show_video_capture)
-        self._add_action(menubar, "格式转换", self._show_format_conversion)
+        self.project_required_actions.append(self._add_action(menubar, "自动标注", self._focus_auto_labeling_panel))
+        self.project_required_actions.append(self._add_action(menubar, "视频截帧", self._show_video_capture))
+        self.project_required_actions.append(self._add_action(menubar, "格式转换", self._show_format_conversion))
         self._add_action(menubar, "环境", self._show_env_check)
+        self._update_project_gate()
 
     def _add_action(self, menu, text: str, callback, shortcut: str | None = None) -> QAction:
         action = QAction(text, self)
@@ -1260,6 +1441,12 @@ class MainWindow(QMainWindow):
         self.annot_list.annotation_selected.connect(self._on_annot_list_selected)
         self.annot_list.annotation_delete_requested.connect(self._delete_shape_by_index)
         self.annot_list.annotation_edit_requested.connect(self._on_edit_label)
+        self.canvas.sam_prompt_created.connect(self._on_sam_prompt)
+        self.canvas.sam_mode_changed.connect(self._on_sam_mode_changed)
+        self.project_panel.project_opened.connect(self._on_project_opened)
+        self.project_panel.data_yaml_ready.connect(self._on_project_data_yaml_ready)
+        self.results_panel.load_inference_requested.connect(self._load_result_for_inference)
+        self.results_panel.load_export_requested.connect(self._load_result_for_export)
         self._refresh_class_quick_buttons()
 
     def _apply_theme(self) -> None:
@@ -1283,6 +1470,19 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _switch_workspace(self, index: int) -> None:
+        if index != 6 and not self._is_project_ready():
+            index = 6
+            if hasattr(self, "project_panel"):
+                self.statusBar().showMessage("请先在项目页新建/导入项目，并导入图片或视频截帧", 3500)
+        if index == 6 and not self.current_project:
+            self.workspace_stack.setCurrentIndex(6)
+            for tab_index, button in getattr(self, "workspace_tab_buttons", {}).items():
+                button.setChecked(tab_index == 6)
+            if hasattr(self, "annotation_tools_container"):
+                self.annotation_tools_container.setVisible(False)
+            self._show_launch_page()
+            return
+        self._show_workbench_page()
         self.workspace_stack.setCurrentIndex(index)
         for action_index, action in getattr(self, "workspace_actions", {}).items():
             action.setChecked(action_index == index)
@@ -1291,13 +1491,153 @@ class MainWindow(QMainWindow):
         if hasattr(self, "annotation_tools_container"):
             self.annotation_tools_container.setVisible(index == 0)
 
+    def _update_project_gate(self) -> None:
+        ready = self._is_project_ready()
+        for index, button in getattr(self, "workspace_tab_buttons", {}).items():
+            button.setEnabled(index == 6 or ready)
+        for action in getattr(self, "project_required_actions", []):
+            action.setEnabled(ready)
+
+    def _is_project_ready(self) -> bool:
+        return bool(self.current_project and self.image_list)
+
+    # ------------------------------------------------------------------
+    # Project workflow
+    # ------------------------------------------------------------------
+
+    def _on_project_opened(self, project: dict) -> None:
+        if not project or not project.get("root"):
+            self.current_project = None
+            self.image_list = []
+            self.current_image_index = -1
+            self.results_panel.set_project(None)
+            self._update_project_gate()
+            self._switch_workspace(6)
+            self.statusBar().showMessage("项目已关闭", 2500)
+            return
+
+        self.current_project = project
+        project_root = Path(project["root"])
+        self.sam_memory_objects = []
+        SAMMemoryPredictorManager.instance().clear()
+        if self.sam_memory_dialog:
+            self.sam_memory_dialog.update_objects(self.sam_memory_objects)
+        self.canvas.memory_display_points = []
+        self.canvas.memory_display_bboxes = []
+
+        self.class_manager = ClassManager(str(project_root))
+        self._ensure_default_classes()
+
+        if hasattr(self.class_panel, "update_class_manager"):
+            self.class_panel.update_class_manager(self.class_manager)
+        else:
+            self.class_panel.class_manager = self.class_manager
+            self.class_panel.refresh_list()
+        self.project_panel.set_class_manager(self.class_manager)
+        self.canvas.set_classes(self.class_manager.get_all_classes())
+        self._refresh_class_quick_buttons()
+        self._update_quality_class_manager()
+
+        images = ProjectManager.list_images(project)
+        self.image_list = images
+        self.current_image_dir = str(project_root / "images")
+        self.current_image_index = 0 if images else -1
+        self.file_search.clear()
+        self.file_list.load_image_list(self.image_list)
+        self._update_project_gate()
+
+        yaml_path = project_root / "data.yaml"
+        if yaml_path.exists():
+            self._last_dataset_yaml = str(yaml_path)
+            self.dataset_panel.data_yaml_edit.setText(str(yaml_path))
+            self.training_panel.data_yaml_edit.setText(str(yaml_path))
+        self.training_panel.project_edit.setText(str(project_root / "runs"))
+        if not self.training_panel.name_edit.text().strip():
+            self.training_panel.name_edit.setText("exp")
+        self.results_panel.set_project(project)
+
+        if images:
+            self._switch_workspace(0)
+            self._load_current_image()
+        else:
+            self._switch_workspace(6)
+            self.current_image_path = None
+            self.annot_list.refresh([])
+            self.canvas.clear_shapes()
+            self.canvas.original_image = None
+            self.canvas.display_pixmap = None
+            self.canvas.image_width = 0
+            self.canvas.image_height = 0
+            self.canvas.update()
+            self._update_status()
+
+        self.statusBar().showMessage(
+            f"项目已打开: {project.get('name', project_root.name)} ({len(images)} 张图片)",
+            3500,
+        )
+
+    def _on_project_data_yaml_ready(self, yaml_path: str) -> None:
+        self._last_dataset_yaml = yaml_path
+        self.dataset_panel.data_yaml_edit.setText(yaml_path)
+        self.training_panel.data_yaml_edit.setText(yaml_path)
+        if self.current_project:
+            self.image_list = ProjectManager.list_images(self.current_project)
+            self.current_image_dir = str(Path(self.current_project["root"]) / "images")
+            if self.image_list:
+                self.current_image_index = min(max(self.current_image_index, 0), len(self.image_list) - 1)
+            else:
+                self.current_image_index = -1
+            self.file_list.load_image_list(self.image_list)
+            if self.current_image_index >= 0:
+                self._load_current_image()
+        self._switch_workspace(1)
+        self.statusBar().showMessage(f"data.yaml 已生成: {yaml_path}", 3500)
+
+    def _load_result_for_inference(self, model_path: str) -> None:
+        self._switch_workspace(2)
+        self.inference_panel.load_model_from_path(model_path)
+
+    def _load_result_for_export(self, model_path: str) -> None:
+        self._switch_workspace(4)
+        self.export_panel.load_model_from_path(model_path)
+
+    def _update_quality_class_manager(self) -> None:
+        tabs = getattr(self, "quality_panel", None)
+        if not isinstance(tabs, QTabWidget):
+            return
+        for index in range(tabs.count()):
+            widget = tabs.widget(index)
+            if hasattr(widget, "class_manager"):
+                widget.class_manager = self.class_manager
+
     # ------------------------------------------------------------------
     # File operations
     # ------------------------------------------------------------------
 
     def _open_image_dir(self) -> None:
+        if not self.current_project:
+            QMessageBox.warning(self, "需要项目", "请先新建或导入项目，再导入图片。")
+            self._switch_workspace(6)
+            return
         dir_path = QFileDialog.getExistingDirectory(self, "打开图片目录")
         if not dir_path:
+            return
+
+        project_root = Path(self.current_project["root"]).resolve()
+        selected_dir = Path(dir_path).resolve()
+        try:
+            selected_dir.relative_to(project_root)
+            inside_project = True
+        except ValueError:
+            inside_project = False
+        if not inside_project:
+            try:
+                imported, skipped = ProjectManager().import_folder(self.current_project, selected_dir)
+                self.current_project = ProjectManager().open_project(project_root)
+                self._on_project_opened(self.current_project)
+                QMessageBox.information(self, "导入完成", f"图片导入当前项目: {imported} 张，跳过 {skipped} 张")
+            except Exception as exc:
+                QMessageBox.critical(self, "导入失败", str(exc))
             return
 
         # ------------------------------------------------------------------
@@ -1352,6 +1692,10 @@ class MainWindow(QMainWindow):
         logger.info(f"Opened image directory: {dir_path} ({len(self.image_list)} images, {structure_info})")
 
     def _open_single_image(self) -> None:
+        if not self.current_project:
+            QMessageBox.warning(self, "需要项目", "请先新建或导入项目，再导入图片。")
+            self._switch_workspace(6)
+            return
         path, _ = QFileDialog.getOpenFileName(
             self,
             "打开图片",
@@ -1360,12 +1704,15 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
-        self.image_list = [path]
-        self.current_image_dir = os.path.dirname(path)
-        self.current_image_index = 0
-        self.file_list.load_image_list(self.image_list)
-        self._switch_workspace(0)
-        self._load_current_image()
+        try:
+            imported, skipped = ProjectManager().import_images(self.current_project, [path])
+            self.current_project = ProjectManager().open_project(self.current_project["root"])
+            self._on_project_opened(self.current_project)
+            self.statusBar().showMessage(f"已导入图片: {imported}，跳过: {skipped}", 2500)
+            return
+        except Exception as exc:
+            QMessageBox.critical(self, "导入失败", str(exc))
+            return
 
     def _load_current_image(self) -> None:
         if not (0 <= self.current_image_index < len(self.image_list)):
@@ -1381,6 +1728,12 @@ class MainWindow(QMainWindow):
         self._set_dirty(False)
         self._update_status()
         self._update_workspace_summary()
+        # Update negative sample button state
+        label_path = label_path_for_image(path)
+        if os.path.isfile(label_path) and os.path.getsize(label_path) == 0:
+            self.negative_btn.setChecked(True)
+        else:
+            self.negative_btn.setChecked(False)
 
     def _prev_image(self) -> None:
         if self.current_image_index > 0:
@@ -1472,6 +1825,10 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _set_canvas_mode(self, mode: CanvasMode) -> None:
+        # If SAM mode is active, deactivate it
+        if self.canvas.sam_active:
+            self.canvas.set_sam_active(False)
+            self.sam_tool_btn.setChecked(False)
         self.canvas.set_mode(mode)
         for item_mode, button in self.mode_actions.items():
             button.setChecked(item_mode == mode)
@@ -2122,6 +2479,887 @@ class MainWindow(QMainWindow):
         self.yolo_model_combo.setFocus()
         self.statusBar().showMessage("YOLO 自动标注位于顶部参数栏", 2500)
 
+    # ------------------------------------------------------------------
+    # SAM interactive annotation
+    # ------------------------------------------------------------------
+
+    def _toggle_sam_mode(self):
+        active = self.sam_tool_btn.isChecked()
+        self.canvas.set_sam_active(active)
+        if active:
+            self.statusBar().showMessage("SAM 模式: 左键点选前景点, Ctrl+左键多点, 右键框选, ESC退出", 5000)
+            sam_config = load_sam_config()
+            self._sam_manager = SAMModelManager()
+            if not self._sam_manager.is_loaded():
+                if not self._sam_manager.load_model(sam_config):
+                    QMessageBox.warning(self, "SAM 模型加载失败",
+                                        "请先在 SAM 配置中设置正确的模型路径")
+                    self.sam_tool_btn.setChecked(False)
+                    self.canvas.set_sam_active(False)
+                    return
+        else:
+            self.canvas.set_sam_active(False)
+
+    def _on_sam_mode_changed(self, active: bool) -> None:
+        if hasattr(self, "sam_tool_btn") and self.sam_tool_btn.isChecked() != active:
+            self.sam_tool_btn.setChecked(active)
+
+    def _on_sam_prompt(self, prompt, prompt_type: str):
+        if not self.current_image_path or self.canvas.original_image is None:
+            return
+        if self._sam_memory_collecting:
+            self._capture_sam_memory_prompt(prompt, prompt_type)
+            self.statusBar().showMessage("已记录 SAM 记忆提示，点击“添加对象”写入记忆对象", 2500)
+            return
+        self.statusBar().showMessage("SAM 推理中...", 0)
+        sam_config = load_sam_config()
+        sam_manager = SAMModelManager()
+
+        if prompt_type == "point":
+            img_points = []
+            for px, py in prompt:
+                ix, iy = self.canvas._widget_to_image(QPoint(int(px), int(py)))
+                img_points.append([ix, iy])
+            points = np.array([img_points], dtype=np.float32)
+            labels = np.array([[1] * len(img_points)], dtype=np.float32)
+            self._sam_worker = SAMInferenceWorker(
+                self.canvas.original_image, sam_manager, sam_config,
+                points=points, labels=labels, prompt_type="point"
+            )
+        elif prompt_type == "box":
+            x1, y1 = self.canvas._widget_to_image(prompt.topLeft())
+            x2, y2 = self.canvas._widget_to_image(prompt.bottomRight())
+            boxes = np.array([[x1, y1, x2, y2]], dtype=np.float32)
+            self._sam_worker = SAMInferenceWorker(
+                self.canvas.original_image, sam_manager, sam_config,
+                boxes=boxes, prompt_type="box"
+            )
+        else:
+            return
+
+        self._sam_worker.finished.connect(self._on_sam_result)
+        self._sam_worker.error.connect(self._on_sam_error)
+        self._sam_worker.start()
+
+    def _on_sam_result(self, results):
+        self.statusBar().showMessage("SAM 完成", 2000)
+        if results is None or len(results) == 0:
+            return
+        try:
+            result = results[0]
+            if result.masks is None:
+                return
+            mask_index = 0
+            boxes = getattr(result, "boxes", None)
+            if boxes is not None and getattr(boxes, "conf", None) is not None and len(boxes.conf) > 0:
+                mask_index = int(boxes.conf.argmax().item())
+            mask_data = result.masks.data
+            mask_count = len(mask_data)
+            if mask_count <= 0:
+                return
+            mask_index = max(0, min(mask_index, mask_count - 1))
+            mask = mask_data[mask_index]
+            mask = mask.cpu().numpy() if hasattr(mask, "cpu") else np.asarray(mask)
+            h, w = self.canvas.image_height, self.canvas.image_width
+            mask = cv2.resize(mask, (w, h))
+            mask = (mask > 0.5).astype(np.uint8)
+
+            from core.annotation import ShapeType
+            class_id = self.canvas.current_class_id
+            class_name = self.class_manager.get_class_name(class_id) or f"类别_{class_id}"
+
+            sam_config = load_sam_config()
+            output_shape = sam_config.get("output_shape", "auto")
+            should_polygon = output_shape == "polygon" or (
+                output_shape == "auto" and self.canvas.current_mode == CanvasMode.CREATE_POLYGON
+            )
+
+            bbox = mask_to_bbox(mask)
+            if bbox is None:
+                return
+            x1, y1, x2, y2 = bbox
+            if x2 - x1 < 5 or y2 - y1 < 5:
+                return
+
+            polygon = mask_to_polygon(mask)
+            if should_polygon and polygon and len(polygon) >= 3:
+                shape = {
+                    "type": ShapeType.POLYGON,
+                    "class_id": class_id,
+                    "class_name": class_name,
+                    "data": {"points": polygon},
+                }
+            else:
+                shape = {
+                    "type": ShapeType.BBOX,
+                    "class_id": class_id,
+                    "class_name": class_name,
+                    "data": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+                }
+            self.canvas.push_undo()
+            shapes = self.canvas.get_shapes()
+            shapes.append(shape)
+            self.canvas.set_shapes(shapes)
+            self.canvas.clear_sam_prompts()
+            self.canvas.shape_created.emit(shape)
+        except Exception as exc:
+            logger.error(f"SAM result error: {exc}")
+
+    def _on_sam_error(self, error_msg: str):
+        self.canvas.clear_sam_prompts()
+        self.statusBar().showMessage(f"SAM 错误: {error_msg}", 5000)
+
+    # ------------------------------------------------------------------
+    # SAM memory annotation
+    # ------------------------------------------------------------------
+
+    def _prepare_sam_memory_context(self) -> tuple[Optional[dict], Optional[str]]:
+        if not self.current_image_path or self.canvas.original_image is None:
+            QMessageBox.warning(self, "提示", "请先打开一张图片")
+            return None, None
+        sam_config = load_sam_config()
+        if sam_config.get("sam_type") not in ("SAM2", "SAM3"):
+            QMessageBox.warning(self, "SAM 记忆模式", "SAM 记忆标注仅支持 SAM2/SAM3")
+            return None, None
+        return sam_config, self.current_image_path
+
+    def start_sam_memory_update(self) -> None:
+        sam_config, _ = self._prepare_sam_memory_context()
+        if not sam_config:
+            return
+
+        self._sam_memory_collecting = True
+        self._sam_memory_pending_points = []
+        self._sam_memory_pending_box = None
+        self.canvas.clear_sam_prompts()
+        self.canvas.set_sam_active(True)
+        self.sam_tool_btn.setChecked(True)
+
+        if self.sam_memory_dialog is None:
+            self.sam_memory_dialog = SAMMemoryObjectsDialog(self)
+            self.sam_memory_dialog.add_requested.connect(self.add_sam_memory_object_from_canvas)
+            self.sam_memory_dialog.delete_requested.connect(self.delete_sam_memory_object)
+            self.sam_memory_dialog.save_requested.connect(self.save_sam_memory_and_infer_current)
+            self.sam_memory_dialog.single_requested.connect(self.run_sam_memory_single)
+            self.sam_memory_dialog.batch_requested.connect(self.run_sam_memory_batch)
+            self.sam_memory_dialog.clear_requested.connect(self.clear_sam_memory)
+            self.sam_memory_dialog.closed.connect(self.on_sam_memory_dialog_closed)
+
+        self.sam_memory_dialog.update_objects(self.sam_memory_objects)
+        self.sam_memory_dialog.show()
+        self.sam_memory_dialog.raise_()
+        self.sam_memory_dialog.activateWindow()
+        self._draw_sam_memory_objects_on_canvas()
+        self.statusBar().showMessage("SAM 记忆采集: 在画布点选或框选后点击添加对象", 5000)
+
+    def _capture_sam_memory_prompt(self, prompt, prompt_type: str) -> None:
+        if prompt_type == "point":
+            points = []
+            for px, py in prompt:
+                ix, iy = self.canvas._widget_to_image(QPoint(int(px), int(py)))
+                points.append((ix, iy))
+            self._sam_memory_pending_points = points
+        elif prompt_type == "box":
+            x1, y1 = self.canvas._widget_to_image(prompt.topLeft())
+            x2, y2 = self.canvas._widget_to_image(prompt.bottomRight())
+            self._sam_memory_pending_box = (
+                min(x1, x2),
+                min(y1, y2),
+                max(x1, x2),
+                max(y1, y2),
+            )
+
+    def _current_sam_memory_prompt(self) -> tuple[list[tuple[int, int]], list[tuple[int, int, int, int]]]:
+        points = list(self._sam_memory_pending_points)
+        if self.canvas.sam_prompt_points:
+            points = [
+                self.canvas._widget_to_image(QPoint(int(px), int(py)))
+                for px, py in self.canvas.sam_prompt_points
+            ]
+        bboxes = [self._sam_memory_pending_box] if self._sam_memory_pending_box else []
+        return points, bboxes
+
+    def add_sam_memory_object_from_canvas(self) -> None:
+        if not self._sam_memory_collecting:
+            self.start_sam_memory_update()
+            return
+        points, bboxes = self._current_sam_memory_prompt()
+        if not points and not bboxes:
+            QMessageBox.warning(self, "提示", "请先在画布上添加点或框提示")
+            return
+
+        suggested_id = max((int(obj.get("obj_id", 0)) for obj in self.sam_memory_objects), default=0) + 1
+        obj_id, ok = QInputDialog.getInt(self, "添加记忆对象", "对象 ID:", suggested_id, 1, 9999, 1)
+        if not ok:
+            return
+
+        class_id = self.class_panel.get_current_class_id()
+        class_name = self.class_manager.get_class_name(class_id) or f"class_{class_id}"
+        memory_object = {
+            "obj_id": int(obj_id),
+            "class_id": int(class_id),
+            "class_name": class_name,
+            "points": points,
+            "bboxes": bboxes,
+        }
+
+        for index, obj in enumerate(self.sam_memory_objects):
+            if int(obj.get("obj_id", -1)) == int(obj_id):
+                self.sam_memory_objects[index] = memory_object
+                break
+        else:
+            self.sam_memory_objects.append(memory_object)
+
+        if self.sam_memory_dialog:
+            self.sam_memory_dialog.update_objects(self.sam_memory_objects)
+        self.canvas.clear_sam_prompts()
+        self._sam_memory_pending_points = []
+        self._sam_memory_pending_box = None
+        self._draw_sam_memory_objects_on_canvas()
+        self.statusBar().showMessage(f"已添加 SAM 记忆对象 ID={obj_id}", 2500)
+
+    def delete_sam_memory_object(self, index: int) -> None:
+        if 0 <= index < len(self.sam_memory_objects):
+            del self.sam_memory_objects[index]
+            if self.sam_memory_dialog:
+                self.sam_memory_dialog.update_objects(self.sam_memory_objects)
+            self._draw_sam_memory_objects_on_canvas()
+
+    def _draw_sam_memory_objects_on_canvas(self) -> None:
+        points = []
+        bboxes = []
+        for obj in self.sam_memory_objects:
+            obj_id = int(obj.get("obj_id", 0))
+            for x, y in obj.get("points") or []:
+                points.append({"x": x, "y": y, "obj_id": obj_id})
+            for x1, y1, x2, y2 in obj.get("bboxes") or []:
+                bboxes.append({"x1": x1, "y1": y1, "x2": x2, "y2": y2, "obj_id": obj_id})
+        self.canvas.memory_display_points = points
+        self.canvas.memory_display_bboxes = bboxes
+        self.canvas.update()
+
+    def on_sam_memory_dialog_closed(self) -> None:
+        self._sam_memory_collecting = False
+        self._sam_memory_pending_points = []
+        self._sam_memory_pending_box = None
+        self.canvas.memory_display_points = []
+        self.canvas.memory_display_bboxes = []
+        self.canvas.clear_sam_prompts()
+        self.canvas.set_sam_active(False)
+        self.sam_tool_btn.setChecked(False)
+        self.canvas.update()
+
+    def clear_sam_memory(self) -> None:
+        SAMMemoryPredictorManager.instance().clear()
+        self.sam_memory_objects = []
+        if self.sam_memory_dialog:
+            self.sam_memory_dialog.update_objects(self.sam_memory_objects)
+        self._draw_sam_memory_objects_on_canvas()
+        self.statusBar().showMessage("SAM 记忆已清空", 2500)
+
+    def _run_sam_memory_predictor(self, sam_config: dict, image_path: str, update_objects: Optional[list[dict]] = None):
+        return SAMMemoryPredictorManager.instance().predict(sam_config, image_path, update_objects=update_objects)
+
+    def save_sam_memory_and_infer_current(self) -> None:
+        sam_config, image_path = self._prepare_sam_memory_context()
+        if not sam_config or not image_path:
+            return
+        if not self.sam_memory_objects:
+            QMessageBox.warning(self, "提示", "请先添加至少一个记忆对象")
+            return
+        try:
+            self._sam_memory_collecting = False
+            self.canvas.set_sam_active(False)
+            self.sam_tool_btn.setChecked(False)
+            self.statusBar().showMessage("SAM 记忆更新中...", 0)
+            QApplication.processEvents()
+            results = self._run_sam_memory_predictor(sam_config, image_path, update_objects=self.sam_memory_objects)
+            count, message = self._apply_sam_memory_results_to_current_image(results)
+            if count:
+                QMessageBox.information(self, "SAM 记忆推理完成", f"当前图新增标注: {count}")
+            else:
+                QMessageBox.warning(self, "SAM 记忆无结果", message)
+        except Exception as exc:
+            logger.error(f"SAM memory update error: {exc}\n{traceback.format_exc()}")
+            QMessageBox.critical(self, "SAM 记忆失败", str(exc))
+        finally:
+            self.statusBar().showMessage("SAM 记忆完成", 2500)
+
+    def run_sam_memory_single(self) -> None:
+        sam_config, image_path = self._prepare_sam_memory_context()
+        if not sam_config or not image_path:
+            return
+        try:
+            self.statusBar().showMessage("SAM 记忆单张推理中...", 0)
+            QApplication.processEvents()
+            results = self._run_sam_memory_predictor(sam_config, image_path)
+            count, message = self._apply_sam_memory_results_to_current_image(results)
+            if count:
+                QMessageBox.information(self, "SAM 记忆单张完成", f"当前图新增标注: {count}")
+            else:
+                QMessageBox.warning(self, "SAM 记忆无结果", message)
+        except Exception as exc:
+            logger.error(f"SAM memory single error: {exc}\n{traceback.format_exc()}")
+            QMessageBox.critical(self, "SAM 记忆失败", str(exc))
+        finally:
+            self.statusBar().showMessage("SAM 记忆完成", 2500)
+
+    def run_sam_memory_batch(self) -> None:
+        sam_config, _ = self._prepare_sam_memory_context()
+        if not sam_config:
+            return
+        if not self.image_list or self.current_image_index < 0:
+            QMessageBox.warning(self, "提示", "当前没有可处理的图片队列")
+            return
+        if not self.sam_memory_objects:
+            QMessageBox.warning(self, "提示", "请先添加并保存至少一个记忆对象")
+            return
+
+        image_paths = self.image_list[self.current_image_index:]
+        progress = QProgressDialog("SAM 记忆批量推理中...", "取消", 0, len(image_paths), self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.show()
+
+        processed = 0
+        annotated = 0
+        failed = 0
+        try:
+            for index, image_path in enumerate(image_paths, start=1):
+                if progress.wasCanceled():
+                    break
+                progress.setValue(index - 1)
+                progress.setLabelText(f"SAM 记忆批量推理: {index}/{len(image_paths)}")
+                QApplication.processEvents()
+
+                try:
+                    update_objects = self.sam_memory_objects if index == 1 else None
+                    results = self._run_sam_memory_predictor(sam_config, image_path, update_objects=update_objects)
+                    shapes, width, height = self._build_sam_memory_shapes(results, image_path)
+                    if shapes and width > 0 and height > 0:
+                        existing = load_yolo_shapes(image_path, width, height, self.class_manager)
+                        save_yolo_shapes(image_path, existing + shapes, width, height)
+                        annotated += 1
+                    processed += 1
+                except Exception as exc:
+                    logger.warning(f"SAM memory batch failed for {image_path}: {exc}")
+                    failed += 1
+
+            progress.setValue(len(image_paths))
+            self.file_list.load_image_list(self.image_list)
+            self.file_list.highlight_current(self.current_image_index)
+            self._load_current_image()
+            QMessageBox.information(
+                self,
+                "SAM 记忆批量完成",
+                f"处理: {processed} 张\n新增标注: {annotated} 张\n失败: {failed} 张",
+            )
+        finally:
+            progress.close()
+
+    def _apply_sam_memory_results_to_current_image(self, results) -> tuple[int, str]:
+        shapes, _, _ = self._build_sam_memory_shapes(results, self.current_image_path)
+        if not shapes:
+            return 0, self._summarize_sam_memory_results(results)
+        self.canvas.push_undo()
+        current_shapes = list(self.canvas.get_shapes())
+        current_shapes.extend(shapes)
+        self.canvas.set_shapes(current_shapes)
+        self.annot_list.refresh(current_shapes)
+        self._set_dirty(True)
+        self._update_workspace_summary()
+        self._autosave_annotations()
+        return len(shapes), "ok"
+
+    def _build_sam_memory_shapes(self, results, image_path: Optional[str]) -> tuple[list[dict], int, int]:
+        if not image_path:
+            return [], 0, 0
+        width, height = self._image_size_for_path(image_path)
+        if width <= 0 or height <= 0 or memory_results_empty(results):
+            return [], width, height
+
+        result = results[0]
+        mask_data = result.masks.data
+        masks = mask_data.cpu().numpy() if hasattr(mask_data, "cpu") else np.asarray(mask_data)
+        masks = np.asarray(masks)
+        if masks.ndim == 2:
+            mask_list = [masks]
+        elif masks.ndim == 3:
+            mask_list = [m for m in masks]
+        elif masks.ndim >= 4:
+            h, w = masks.shape[-2], masks.shape[-1]
+            mask_list = [m for m in masks.reshape(-1, h, w)]
+        else:
+            return [], width, height
+
+        sam_config = load_sam_config()
+        output_shape = sam_config.get("output_shape", "auto")
+        project_task = (self.current_project or {}).get("task", "detect")
+        should_polygon = output_shape == "polygon" or (
+            output_shape == "auto"
+            and (self.canvas.current_mode == CanvasMode.CREATE_POLYGON or project_task == "segment")
+        )
+
+        shapes = []
+        for index, mask in enumerate(mask_list):
+            if mask.ndim > 2:
+                mask = mask.squeeze()
+            if mask.shape[:2] != (height, width):
+                mask = cv2.resize(mask, (width, height))
+            mask = (mask > 0.5).astype(np.uint8)
+            bbox = mask_to_bbox(mask)
+            if bbox is None:
+                continue
+            x1, y1, x2, y2 = bbox
+            if x2 - x1 < 5 or y2 - y1 < 5:
+                continue
+            obj = self.sam_memory_objects[index] if index < len(self.sam_memory_objects) else {}
+            class_id = int(obj.get("class_id", self.class_panel.get_current_class_id()))
+            class_name = self.class_manager.get_class_name(class_id) or obj.get("class_name") or f"class_{class_id}"
+            polygon = mask_to_polygon(mask)
+            if should_polygon and polygon and len(polygon) >= 3:
+                shapes.append({
+                    "type": ShapeType.POLYGON,
+                    "class_id": class_id,
+                    "class_name": class_name,
+                    "data": {"points": polygon},
+                })
+            else:
+                shapes.append({
+                    "type": ShapeType.BBOX,
+                    "class_id": class_id,
+                    "class_name": class_name,
+                    "data": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+                })
+        return shapes, width, height
+
+    def _image_size_for_path(self, image_path: str) -> tuple[int, int]:
+        if image_path == self.current_image_path and self.canvas.image_width and self.canvas.image_height:
+            return self.canvas.image_width, self.canvas.image_height
+        try:
+            data = Path(image_path).read_bytes()
+            image = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+            if image is not None:
+                h, w = image.shape[:2]
+                return int(w), int(h)
+        except Exception:
+            pass
+        return 0, 0
+
+    @staticmethod
+    def _summarize_sam_memory_results(results) -> str:
+        if not results or len(results) == 0:
+            return "results=empty"
+        result = results[0]
+        masks = getattr(result, "masks", None)
+        data = getattr(masks, "data", None) if masks is not None else None
+        if data is None:
+            return "masks=None"
+        try:
+            return f"masks.shape={tuple(data.shape)}, count={len(data)}"
+        except Exception:
+            return "masks=unreadable"
+
+    # ------------------------------------------------------------------
+    # LLM auto-labeling
+    # ------------------------------------------------------------------
+
+    def _run_llm_auto_label(self):
+        if not self._is_llm_detect_project():
+            return
+        if not self.current_image_path:
+            QMessageBox.warning(self, "提示", "请先打开图片")
+            return
+
+        class_info = self._current_llm_class()
+        if class_info is None:
+            return
+        _class_id, target_class = class_info
+
+        llm_config = load_llm_config()
+        if not llm_config.get("api_key"):
+            QMessageBox.warning(self, "提示", "请先在 LLM 配置中设置 API Key")
+            self._show_auto_label_dialog_llm()
+            return
+
+        self.statusBar().showMessage(f"LLM 推理中 (检测: {target_class})...", 0)
+        self._llm_worker = LLMInferenceWorker(
+            self.current_image_path, target_class, llm_config
+        )
+        self._llm_worker.finished.connect(self._on_llm_result)
+        self._llm_worker.error.connect(self._on_llm_error)
+        self._llm_worker.start()
+
+    def _on_llm_result(self, detections):
+        self.statusBar().showMessage(f"LLM 完成: {len(detections)} 个检测", 3000)
+        if not detections:
+            QMessageBox.information(self, "完成", "未检测到目标")
+            return
+
+        img_w = self.canvas.image_width
+        img_h = self.canvas.image_height
+        if img_w <= 0 or img_h <= 0:
+            return
+
+        class_info = self._current_llm_class()
+        if class_info is None:
+            return
+        class_id, class_name = class_info
+
+        existing_count = len(self.canvas.get_shapes())
+        self.canvas.push_undo()
+        shapes = list(self.canvas.get_shapes())
+        shapes.extend(self._llm_detections_to_shapes(detections, img_w, img_h, class_id, class_name))
+        if len(shapes) == existing_count:
+            QMessageBox.information(self, "完成", "未生成有效标注")
+            return
+        self.canvas.set_shapes(shapes)
+        self.class_manager.save()
+        self.class_panel.refresh_list()
+        self.canvas.set_classes(self.class_manager.get_all_classes())
+        self._refresh_class_quick_buttons()
+        self.annot_list.refresh(shapes)
+        self._set_dirty(True)
+        self._update_workspace_summary()
+        self._autosave_annotations()
+        self.file_list.load_image_list(self.image_list)
+        self.file_list.highlight_current(self.current_image_index)
+
+    def _run_llm_auto_label_batch(self):
+        if not self._is_llm_detect_project():
+            return
+        if not self.image_list:
+            QMessageBox.warning(self, "提示", "项目中没有图片")
+            return
+        if self._llm_batch_worker is not None and self._llm_batch_worker.isRunning():
+            QMessageBox.warning(self, "提示", "LLM 批量推理正在进行")
+            return
+
+        class_info = self._current_llm_class()
+        if class_info is None:
+            return
+        class_id, target_class = class_info
+
+        llm_config = load_llm_config()
+        if not llm_config.get("api_key"):
+            QMessageBox.warning(self, "提示", "请先在 LLM 配置中设置 API Key")
+            self._show_auto_label_dialog_llm()
+            return
+
+        self._llm_batch_class_id = class_id
+        self._llm_batch_class_name = target_class
+        self._llm_progress_dialog = QProgressDialog("正在使用 LLM 进行批量检测...", "取消", 0, len(self.image_list), self)
+        self._llm_progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        self._llm_progress_dialog.setMinimumDuration(0)
+        self._llm_progress_dialog.setValue(0)
+
+        self._llm_batch_worker = LLMBatchInferenceWorker(list(self.image_list), target_class, llm_config)
+        self._llm_progress_dialog.canceled.connect(self._llm_batch_worker.stop)
+        self._llm_batch_worker.progress.connect(self._on_llm_batch_progress)
+        self._llm_batch_worker.finished.connect(self._on_llm_batch_finished)
+        self._llm_batch_worker.error.connect(self._on_llm_batch_error)
+        self._llm_batch_worker.start()
+
+    def _on_llm_batch_progress(self, current: int, total: int, image_path: str) -> None:
+        if self._llm_progress_dialog:
+            self._llm_progress_dialog.setMaximum(total)
+            self._llm_progress_dialog.setValue(max(0, current - 1))
+            self._llm_progress_dialog.setLabelText(
+                f"正在处理: {os.path.basename(image_path)} ({current}/{total})"
+            )
+
+    def _on_llm_batch_finished(self, results: dict) -> None:
+        if self._llm_progress_dialog:
+            self._llm_progress_dialog.setValue(self._llm_progress_dialog.maximum())
+            self._llm_progress_dialog.close()
+            self._llm_progress_dialog = None
+
+        total_added = 0
+        processed = 0
+        for image_path, detections in results.items():
+            width, height = self._image_size_for_path(image_path)
+            if width <= 0 or height <= 0:
+                continue
+            processed += 1
+            new_shapes = self._llm_detections_to_shapes(
+                detections,
+                width,
+                height,
+                self._llm_batch_class_id,
+                self._llm_batch_class_name,
+            )
+            if not new_shapes:
+                continue
+            existing = load_yolo_shapes(image_path, width, height, self.class_manager)
+            save_yolo_shapes(image_path, existing + new_shapes, width, height)
+            total_added += len(new_shapes)
+
+        self.file_list.load_image_list(self.image_list)
+        self.file_list.highlight_current(self.current_image_index)
+        if self.current_image_path in results:
+            self._load_annotations_for_image(self.current_image_path)
+        self.statusBar().showMessage(f"LLM 批量完成: 处理 {processed} 张，添加 {total_added} 个标注", 5000)
+        QMessageBox.information(self, "完成", f"批量推理完成\n处理了 {processed} 张图片\n共添加 {total_added} 个标注")
+
+    def _on_llm_batch_error(self, error_msg: str) -> None:
+        if self._llm_progress_dialog:
+            self._llm_progress_dialog.close()
+            self._llm_progress_dialog = None
+        self._on_llm_error(error_msg)
+
+    def _is_llm_detect_project(self) -> bool:
+        if not self.current_project:
+            QMessageBox.warning(self, "提示", "请先选择一个项目")
+            return False
+        if self.current_project.get("task", "detect") != "detect":
+            QMessageBox.information(self, "提示", "功能还在完善，敬请期待")
+            return False
+        return True
+
+    def _current_llm_class(self) -> Optional[tuple[int, str]]:
+        classes = self.class_manager.get_all_classes()
+        if not classes:
+            QMessageBox.warning(self, "提示", "请先创建类别")
+            return None
+        class_id = self.class_panel.get_current_class_id() if hasattr(self, "class_panel") else self.canvas.current_class_id
+        if not 0 <= class_id < len(classes):
+            class_id = 0
+        return class_id, classes[class_id]
+
+    @staticmethod
+    def _llm_detections_to_shapes(
+        detections,
+        image_width: int,
+        image_height: int,
+        class_id: int,
+        class_name: str,
+    ) -> list[dict]:
+        shapes = []
+        for _label, x1, y1, x2, y2 in detections:
+            if max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 1.0:
+                abs_x1 = int(x1 * image_width)
+                abs_y1 = int(y1 * image_height)
+                abs_x2 = int(x2 * image_width)
+                abs_y2 = int(y2 * image_height)
+            else:
+                abs_x1, abs_y1, abs_x2, abs_y2 = int(x1), int(y1), int(x2), int(y2)
+            abs_x1 = max(0, min(abs_x1, image_width))
+            abs_y1 = max(0, min(abs_y1, image_height))
+            abs_x2 = max(0, min(abs_x2, image_width))
+            abs_y2 = max(0, min(abs_y2, image_height))
+            abs_x1, abs_x2 = sorted((abs_x1, abs_x2))
+            abs_y1, abs_y2 = sorted((abs_y1, abs_y2))
+            if abs_x2 - abs_x1 < 2 or abs_y2 - abs_y1 < 2:
+                continue
+            shapes.append({
+                "type": ShapeType.BBOX,
+                "class_id": class_id,
+                "class_name": class_name,
+                "data": {"x1": abs_x1, "y1": abs_y1, "x2": abs_x2, "y2": abs_y2},
+            })
+        return shapes
+
+    def _on_llm_error(self, error_msg: str):
+        self.statusBar().showMessage(f"LLM 错误: {error_msg}", 5000)
+        QMessageBox.critical(self, "LLM 错误", error_msg)
+
+    # ------------------------------------------------------------------
+    # Auto-label settings dialogs
+    # ------------------------------------------------------------------
+
+    def _show_auto_label_dialog_sam(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("SAM 自动标注配置")
+        dlg.setMinimumWidth(520)
+        dlg.setModal(True)
+        layout = QVBoxLayout(dlg)
+
+        sam_config = load_sam_config()
+
+        form = QFormLayout()
+        sam_type_combo = QComboBox()
+        sam_type_combo.addItems(["SAM", "SAM2", "SAM3", "MobileSAM", "FastSAM"])
+        sam_type_combo.setCurrentText(sam_config.get("sam_type", "SAM2"))
+        sam_type_combo.currentTextChanged.connect(
+            lambda t: self._update_sam_download_info(t, download_info_label, model_file_edit)
+        )
+        form.addRow("SAM 类型:", sam_type_combo)
+
+        model_file_edit = QLineEdit(sam_config.get("model_file", "sam2.1_b.pt"))
+        form.addRow("模型文件:", model_file_edit)
+
+        device_edit = QLineEdit(sam_config.get("device", ""))
+        device_edit.setPlaceholderText("留空=自动, 或指定 0, 1, cpu")
+        form.addRow("设备:", device_edit)
+
+        imgsz_spin = QSpinBox()
+        imgsz_spin.setRange(256, 4096)
+        imgsz_spin.setSingleStep(64)
+        imgsz_spin.setValue(sam_config.get("imgsz", 1024))
+        form.addRow("图像尺寸:", imgsz_spin)
+
+        conf_spin = QDoubleSpinBox()
+        conf_spin.setRange(0.01, 1.0)
+        conf_spin.setSingleStep(0.05)
+        conf_spin.setValue(sam_config.get("conf", 0.25))
+        form.addRow("置信度:", conf_spin)
+
+        iou_spin = QDoubleSpinBox()
+        iou_spin.setRange(0.01, 1.0)
+        iou_spin.setSingleStep(0.05)
+        iou_spin.setValue(sam_config.get("iou", 0.9))
+        form.addRow("IOU:", iou_spin)
+
+        usage_combo = QComboBox()
+        usage_combo.addItem("普通交互", "normal")
+        usage_combo.addItem("记忆标注 (SAM2/SAM3)", "memory")
+        current_usage = sam_config.get("usage_mode", "normal")
+        for i in range(usage_combo.count()):
+            if usage_combo.itemData(i) == current_usage:
+                usage_combo.setCurrentIndex(i)
+                break
+        form.addRow("使用模式:", usage_combo)
+
+        output_combo = QComboBox()
+        output_options = [
+            ("跟随当前工具", "auto"),
+            ("矩形框", "bbox"),
+            ("多边形", "polygon"),
+        ]
+        for label, value in output_options:
+            output_combo.addItem(label, value)
+        current_output = sam_config.get("output_shape", "auto")
+        for i in range(output_combo.count()):
+            if output_combo.itemData(i) == current_output:
+                output_combo.setCurrentIndex(i)
+                break
+        form.addRow("输出形状:", output_combo)
+
+        layout.addLayout(form)
+
+        SAM_DOWNLOAD_URLS = {
+            "SAM": "自动下载 (ultralytics)",
+            "SAM2": "自动下载 (ultralytics)",
+            "SAM3": "https://github.com/ultralytics/assets/releases/download/v8.3.0/sam3_b.pt",
+            "MobileSAM": "https://github.com/ultralytics/assets/releases/download/v8.3.0/mobile_sam.pt",
+            "FastSAM": "https://github.com/ultralytics/assets/releases/download/v8.3.0/FastSAM-x.pt",
+        }
+        download_info_label = QLabel()
+        download_info_label.setWordWrap(True)
+        download_info_label.setObjectName("MutedText")
+        download_info_label.setOpenExternalLinks(True)
+        layout.addWidget(download_info_label)
+
+        self._update_sam_download_info(sam_type_combo.currentText(), download_info_label, model_file_edit)
+
+        btn_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        btn_box.accepted.connect(dlg.accept)
+        btn_box.rejected.connect(dlg.reject)
+        layout.addWidget(btn_box)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            new_config = {
+                "sam_type": sam_type_combo.currentText(),
+                "model_file": model_file_edit.text(),
+                "device": device_edit.text(),
+                "imgsz": imgsz_spin.value(),
+                "conf": conf_spin.value(),
+                "iou": iou_spin.value(),
+                "retina_masks": True,
+                "usage_mode": usage_combo.currentData(),
+                "output_shape": output_combo.currentData(),
+            }
+            save_sam_config(new_config)
+            SAMModelManager().release_model()
+
+    @staticmethod
+    def _update_sam_download_info(sam_type: str, info_label, model_file_edit):
+        urls = {
+            "SAM": ("sam_b.pt", "https://github.com/ultralytics/assets/releases/download/v8.3.0/sam_b.pt"),
+            "SAM2": ("sam2.1_b.pt", "https://github.com/ultralytics/assets/releases/download/v8.3.0/sam2.1_b.pt"),
+            "SAM3": ("sam3_b.pt", "https://github.com/ultralytics/assets/releases/download/v8.3.0/sam3_b.pt"),
+            "MobileSAM": ("mobile_sam.pt", "https://github.com/ultralytics/assets/releases/download/v8.3.0/mobile_sam.pt"),
+            "FastSAM": ("FastSAM-x.pt", "https://github.com/ultralytics/assets/releases/download/v8.3.0/FastSAM-x.pt"),
+        }
+        model_file, url = urls.get(sam_type, ("sam2.1_b.pt", ""))
+        model_file_edit.setText(model_file)
+
+        html = f'下载地址: <a href="{url}">{url}</a>'
+        info_label.setText(html)
+        info_label.setStyleSheet("color: #4ecdc4; padding: 8px;")
+
+    def _show_auto_label_dialog_llm(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("LLM 自动标注配置")
+        dlg.setMinimumWidth(600)
+        dlg.setModal(True)
+        layout = QVBoxLayout(dlg)
+
+        llm_config = load_llm_config()
+
+        form = QFormLayout()
+        api_key_edit = QLineEdit(llm_config.get("api_key", ""))
+        api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        form.addRow("API Key:", api_key_edit)
+
+        base_url_edit = QLineEdit(llm_config.get("base_url", "https://dashscope.aliyuncs.com/compatible-mode/v1"))
+        form.addRow("Base URL:", base_url_edit)
+
+        model_name_edit = QLineEdit(llm_config.get("model_name", "qwen-vl-max"))
+        form.addRow("模型名称:", model_name_edit)
+
+        sys_prompt_edit = QTextEdit()
+        sys_prompt_edit.setPlainText(llm_config.get("system_prompt", ""))
+        sys_prompt_edit.setMaximumHeight(80)
+        form.addRow("系统提示词:", sys_prompt_edit)
+
+        user_prompt_edit = QTextEdit()
+        user_prompt_edit.setPlainText(llm_config.get("user_prompt", ""))
+        user_prompt_edit.setMaximumHeight(80)
+        form.addRow("用户提示词:", user_prompt_edit)
+        layout.addLayout(form)
+
+        btn_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        btn_box.accepted.connect(dlg.accept)
+        btn_box.rejected.connect(dlg.reject)
+        layout.addWidget(btn_box)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            new_config = {
+                "api_key": api_key_edit.text(),
+                "base_url": base_url_edit.text(),
+                "model_name": model_name_edit.text(),
+                "system_prompt": sys_prompt_edit.toPlainText(),
+                "user_prompt": user_prompt_edit.toPlainText(),
+            }
+            save_llm_config(new_config)
+
+    # ------------------------------------------------------------------
+    # Negative sample toggle
+    # ------------------------------------------------------------------
+
+    def _toggle_negative_sample(self, checked: bool):
+        if not self.current_image_path:
+            self.negative_btn.setChecked(False)
+            return
+        label_path = label_path_for_image(self.current_image_path)
+        if checked:
+            label_dir = os.path.dirname(label_path)
+            if label_dir:
+                os.makedirs(label_dir, exist_ok=True)
+            Path(label_path).write_text("", encoding="utf-8")
+            self.statusBar().showMessage("已标记为负样本(无目标)", 2000)
+        else:
+            if os.path.isfile(label_path):
+                content = Path(label_path).read_text(encoding="utf-8").strip()
+                if not content:
+                    os.remove(label_path)
+                    self.statusBar().showMessage("已取消负样本标记", 2000)
+        self.file_list.load_image_list(self.image_list)
+        self.file_list.highlight_current(self.current_image_index)
 
     def _show_env_check(self) -> None:
         try:
@@ -2133,10 +3371,17 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "错误", f"无法打开环境检测:\n{exc}")
 
     def _show_video_capture(self) -> None:
+        if not self.current_project:
+            QMessageBox.warning(self, "需要项目", "请先新建或导入项目，再进行视频截帧。")
+            self._switch_workspace(6)
+            return
         try:
             from gui.video_capture_dialog import VideoCaptureDialog
 
             dialog = VideoCaptureDialog(self)
+            output_dir = Path(self.current_project["root"]) / "images" / "video_frames"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            dialog.output_edit.setText(str(output_dir))
             dialog.frames_captured.connect(self._load_captured_frames)
             dialog.exec()
         except Exception as exc:
@@ -2152,14 +3397,25 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "提示", "没有可加载的截帧图片")
             return
 
-        self.image_list = valid_paths
-        self.current_image_dir = os.path.dirname(valid_paths[0])
-        self.current_image_index = 0
-        self.file_search.clear()
-        self.file_list.load_image_list(self.image_list)
-        self._switch_workspace(0)
-        self._load_current_image()
-        self.statusBar().showMessage(f"已加载 {len(valid_paths)} 帧到标注", 3000)
+        if not self.current_project:
+            QMessageBox.warning(self, "需要项目", "请先新建或导入项目")
+            self._switch_workspace(6)
+            return
+
+        images_root = (Path(self.current_project["root"]) / "images").resolve()
+        external_paths: list[str] = []
+        for path in valid_paths:
+            frame_path = Path(path).resolve()
+            try:
+                frame_path.relative_to(images_root)
+            except ValueError:
+                external_paths.append(str(frame_path))
+
+        if external_paths:
+            ProjectManager().import_images(self.current_project, external_paths)
+        self.current_project = ProjectManager().open_project(self.current_project["root"])
+        self._on_project_opened(self.current_project)
+        self.statusBar().showMessage(f"已导入 {len(valid_paths)} 帧到当前项目", 3000)
 
     def _show_format_conversion(self) -> None:
         try:
@@ -2182,6 +3438,8 @@ class MainWindow(QMainWindow):
         )
 
     def _on_trained_model_ready(self, best_pt: str, action: str) -> None:
+        if hasattr(self, "results_panel"):
+            self.results_panel.refresh_runs()
         if action == "infer":
             self._switch_workspace(2)
             self.inference_panel.load_model_from_path(best_pt)
@@ -2228,6 +3486,15 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:
+        if hasattr(self, "project_panel"):
+            self.project_panel.shutdown()
+        if self._llm_batch_worker and self._llm_batch_worker.isRunning():
+            self._llm_batch_worker.stop()
+            self._llm_batch_worker.quit()
+            self._llm_batch_worker.wait(3000)
+        if self._llm_worker and self._llm_worker.isRunning():
+            self._llm_worker.quit()
+            self._llm_worker.wait(3000)
         if self._yolo_label_thread and self._yolo_label_thread.isRunning():
             self._yolo_label_thread.quit()
             self._yolo_label_thread.wait(3000)

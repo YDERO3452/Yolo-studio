@@ -12,6 +12,7 @@ onnxruntime>=1.18.0
 transformers>=4.40.0
 accelerate>=0.30.0
 Pillow>=10.0.0
+openai>=1.40.0
 
 # GUI
 PyQt6>=6.6.0
