@@ -125,6 +125,12 @@ Yolo Studio/
 - **参考内容**：交互式图像分割、提示工程
 - **已集成**：SAM2/SAM3 动态记忆标注
 
+### Large Language Models (LLM)
+
+- **参考实现**：OpenAI API / 阿里云通义千问
+- **参考内容**：视觉语言模型目标检测、智能标注生成
+- **已集成**：基于 Qwen-VL 的 LLM 自动标注
+
 ### PyQt6
 
 - **官方文档**：https://www.riverbankcomputing.com/static/Docs/PyQt6/
