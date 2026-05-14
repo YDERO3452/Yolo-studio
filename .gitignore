@@ -12,6 +12,7 @@ runs/
 projects/
 EzYOLO/
 config/llm_config.json
+.claude/
 
 .DS_Store
 Thumbs.db
