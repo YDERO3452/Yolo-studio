@@ -119,6 +119,11 @@ Yolo Studio/
 - **官方文档**：https://docs.ultralytics.com/
 - **参考内容**：训练/推理接口、数据集规范、模型导出
 
+### Segment Anything Model (SAM)
+
+- **项目地址**：https://github.com/facebookresearch/segment-anything
+- **参考内容**：交互式图像分割、提示工程
+
 ### PyQt6
 
 - **官方文档**：https://www.riverbankcomputing.com/static/Docs/PyQt6/
