@@ -13,7 +13,6 @@ from PyQt6.QtGui import (
 import cv2
 import numpy as np
 
-
 class CanvasMode(str, Enum):
     EDIT = "edit"
     CREATE_BBOX = "create_bbox"
@@ -21,11 +20,9 @@ class CanvasMode(str, Enum):
     CREATE_OBB = "create_obb"
     CREATE_KEYPOINT = "create_keypoint"
 
-
 def _shape_type_value(shape_type) -> str:
     """Return a stable string value for ShapeType enum or legacy strings."""
     return getattr(shape_type, "value", str(shape_type))
-
 
 class AnnotationCanvas(QWidget):
     """Canvas for displaying images and drawing annotations."""
@@ -38,8 +35,6 @@ class AnnotationCanvas(QWidget):
     zoom_changed = pyqtSignal(float)
     class_switch_requested = pyqtSignal(int)  # 数字键切换类别 (0-based index)
     edit_label_requested = pyqtSignal(int)    # 双击编辑标注标签 (shape index)
-    sam_prompt_created = pyqtSignal(object, str)  # (points_or_box, "point"/"box") — SAM prompt ready
-    sam_mode_changed = pyqtSignal(bool)
 
     # Colors for classes
     COLORS = [
@@ -90,15 +85,6 @@ class AnnotationCanvas(QWidget):
         self.obb_angle = 0.0  # degrees
 
         # KEYPOINT drawing — no intermediate state, single click
-
-        # SAM interaction state
-        self.sam_active = False
-        self.sam_prompt_points = []    # list of (x, y) in widget coords (foreground points)
-        self.sam_prompt_box = None     # (start_pos, end_pos) or None
-        self.sam_boxes = []            # list of QRect for rendered SAM result boxes
-        self.sam_result_shapes = []    # list of shape dicts from SAM inference
-        self.memory_display_points = []  # image-space dicts: x, y, obj_id
-        self.memory_display_bboxes = []  # image-space dicts: x1, y1, x2, y2, obj_id
 
         # Move / resize state
         self.moving = False
@@ -191,10 +177,10 @@ class AnnotationCanvas(QWidget):
         self.image_height, self.image_width = self.original_image.shape[:2]
         self.fit_to_window()
 
-    def fit_to_window(self, target_size: QSize | None = None):
+    def fit_to_window(self, target_size=None):
         if self.original_image is None:
             return
-        if target_size is not None and target_size.isValid():
+        if isinstance(target_size, QSize) and target_size.isValid():
             widget_w, widget_h = target_size.width(), target_size.height()
         else:
             viewport = self.parentWidget()
@@ -223,22 +209,6 @@ class AnnotationCanvas(QWidget):
         self.selected_shape = -1
         self.update()
 
-    def set_sam_active(self, active: bool):
-        """Enable or disable SAM interactive mode."""
-        changed = self.sam_active != active
-        self.sam_active = active
-        if not active:
-            self.clear_sam_prompts()
-        if changed:
-            self.sam_mode_changed.emit(active)
-        self.update()
-
-    def clear_sam_prompts(self):
-        """Clear visual SAM point/box prompts without changing mode."""
-        self.sam_prompt_points.clear()
-        self.sam_prompt_box = None
-        self.sam_boxes.clear()
-        self.sam_result_shapes.clear()
         self.update()
 
     def cancel_drawing(self):
@@ -379,8 +349,6 @@ class AnnotationCanvas(QWidget):
         for i, shape in enumerate(self.shapes):
             self._paint_shape(painter, shape, i, ox, oy, scale)
 
-        self._paint_memory_prompts(painter, ox, oy, scale)
-
         # Draw in-progress drawing
         self._paint_active_drawing(painter, ox, oy, scale)
 
@@ -502,23 +470,6 @@ class AnnotationCanvas(QWidget):
     def _paint_active_drawing(self, painter, ox, oy, scale):
         from core.annotation import ShapeType
 
-        # SAM prompts
-        if self.sam_active:
-            # SAM prompt points (yellow dots)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(255, 255, 0))
-            for px, py in self.sam_prompt_points:
-                painter.drawEllipse(QPoint(int(px), int(py)), 6, 6)
-            # SAM box prompt (cyan dashed rectangle)
-            if self.sam_prompt_box is not None:
-                pen = QPen(QColor(0, 255, 255), 2, Qt.PenStyle.DashLine)
-                painter.setPen(pen)
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                rect = QRect(self.sam_prompt_box[0], self.sam_prompt_box[1]).normalized()
-                painter.drawRect(rect)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            return
-
         if self.drawing_bbox:
             pen = QPen(QColor(255, 255, 0), 2, Qt.PenStyle.DashLine)
             painter.setPen(pen)
@@ -555,39 +506,7 @@ class AnnotationCanvas(QWidget):
                 painter.drawRect(QRect(-rect.width() // 2, -rect.height() // 2, rect.width(), rect.height()))
                 painter.restore()
 
-    def _paint_memory_prompts(self, painter, ox, oy, scale):
-        if not self.memory_display_points and not self.memory_display_bboxes:
             return
-
-        painter.save()
-        font = QFont("Arial", 9)
-        font.setBold(True)
-        painter.setFont(font)
-
-        for point in self.memory_display_points:
-            obj_id = int(point.get("obj_id", 0))
-            color = self.COLORS[obj_id % len(self.COLORS)]
-            sx = int(float(point.get("x", 0)) * scale) + ox
-            sy = int(float(point.get("y", 0)) * scale) + oy
-            painter.setPen(QPen(QColor(0, 0, 0, 180), 2))
-            painter.setBrush(color)
-            painter.drawEllipse(QPoint(sx, sy), 7, 7)
-            painter.setPen(color)
-            painter.drawText(QPoint(sx + 9, sy - 9), f"ID {obj_id}")
-
-        for bbox in self.memory_display_bboxes:
-            obj_id = int(bbox.get("obj_id", 0))
-            color = self.COLORS[obj_id % len(self.COLORS)]
-            x1 = int(float(bbox.get("x1", 0)) * scale) + ox
-            y1 = int(float(bbox.get("y1", 0)) * scale) + oy
-            x2 = int(float(bbox.get("x2", 0)) * scale) + ox
-            y2 = int(float(bbox.get("y2", 0)) * scale) + oy
-            painter.setPen(QPen(color, 2, Qt.PenStyle.DashLine))
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRect(QRect(QPoint(x1, y1), QPoint(x2, y2)).normalized())
-            painter.drawText(QPoint(min(x1, x2) + 4, min(y1, y2) - 6), f"ID {obj_id}")
-
-        painter.restore()
 
     def _draw_resize_handles_rect(self, painter, sx1, sy1, sx2, sy2):
         painter.setPen(QPen(QColor(0, 255, 255), 1))
@@ -622,22 +541,6 @@ class AnnotationCanvas(QWidget):
     def mousePressEvent(self, event):
         from core.annotation import ShapeType
         pos = event.pos()
-
-        # SAM interactive mode takes priority
-        if self.sam_active:
-            if event.button() == Qt.MouseButton.LeftButton:
-                if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-                    self.sam_prompt_points.append((pos.x(), pos.y()))
-                    self.update()
-                else:
-                    self.sam_prompt_points.append((pos.x(), pos.y()))
-                    self.sam_prompt_created.emit(self.sam_prompt_points[:], "point")
-                    self.update()
-                return
-            elif event.button() == Qt.MouseButton.RightButton:
-                self.sam_prompt_box = (pos, pos)
-                self.update()
-                return
 
         if event.button() == Qt.MouseButton.MiddleButton:
             self.panning = True
@@ -731,12 +634,6 @@ class AnnotationCanvas(QWidget):
         img_x, img_y = self._widget_to_image(pos)
         self.mouse_position.emit(img_x, img_y)
 
-        # SAM box prompt drawing
-        if self.sam_active and self.sam_prompt_box is not None:
-            self.sam_prompt_box = (self.sam_prompt_box[0], pos)
-            self.update()
-            return
-
         if self.panning:
             dx = pos.x() - self.pan_start.x()
             dy = pos.y() - self.pan_start.y()
@@ -776,16 +673,6 @@ class AnnotationCanvas(QWidget):
 
     def mouseReleaseEvent(self, event):
         from core.annotation import ShapeType
-
-        # SAM box prompt complete
-        if self.sam_active and event.button() == Qt.MouseButton.RightButton and self.sam_prompt_box is not None:
-            box = self.sam_prompt_box
-            self.sam_prompt_box = None
-            rect = QRect(box[0], box[1]).normalized()
-            if rect.width() > 10 and rect.height() > 10:
-                self.sam_prompt_created.emit(rect, "box")
-            self.update()
-            return
 
         if event.button() == Qt.MouseButton.MiddleButton:
             self.panning = False
@@ -913,9 +800,6 @@ class AnnotationCanvas(QWidget):
             return
 
         if key == Qt.Key.Key_Escape:
-            if self.sam_active:
-                self.set_sam_active(False)
-                return
             self.cancel_drawing()
             self.selected_shape = -1
             self.update()

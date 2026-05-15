@@ -123,7 +123,6 @@ Yolo Studio/
 
 - **项目地址**：https://github.com/facebookresearch/segment-anything
 - **参考内容**：交互式图像分割、提示工程
-- **已集成**：SAM2/SAM3 动态记忆标注
 
 ### Large Language Models (LLM)
 
@@ -182,7 +181,7 @@ Yolo Studio/
 | yolov8m.pt | 50.9 MB | YOLOv8 Medium 目标检测 |
 
 下载后将所有 `.pt` 文件放置到项目根目录即可使用。
-Todo：下一步准备集成Meta的SAM3模型，用于自动标注！
+
 ---
 
 ## CUDA 安装指南
