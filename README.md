@@ -58,7 +58,13 @@ YOLO Studio 是一个基于 PyQt6 和 Ultralytics YOLO 框架开发的桌面端�
 - 多种 YOLO 模型版本支持（YOLOv8、YOLO26）
 - 检测结果可视化与导出
 
-### 5. 导出与格式转换
+### 5. 智能标注 (LLM)
+
+- 集成 Qwen-VL 视觉语言模型
+- 基于自然语言提示的自动目标检测
+- 辅助人工标注，提升效率
+
+### 6. 导出与格式转换
 
 - 支持 YOLO、Pascal VOC、COCO、DOTA 格式互转
 - 灵活的导出路径配置
@@ -119,16 +125,11 @@ Yolo Studio/
 - **官方文档**：https://docs.ultralytics.com/
 - **参考内容**：训练/推理接口、数据集规范、模型导出
 
-### Segment Anything Model (SAM)
-
-- **项目地址**：https://github.com/facebookresearch/segment-anything
-- **参考内容**：交互式图像分割、提示工程
-
 ### Large Language Models (LLM)
 
 - **参考实现**：OpenAI API / 阿里云通义千问
 - **参考内容**：视觉语言模型目标检测、智能标注生成
-- **已集成**：基于 Qwen-VL 的 LLM 自动标注
+- **已集成**：基于 Qwen-VL 的 LLM 自动标注功能，支持通过文本提示快速生成标注框。
 
 ### PyQt6
 
