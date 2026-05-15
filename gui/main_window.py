@@ -597,8 +597,18 @@ class MainWindow(QMainWindow):
         top_row.addWidget(save_btn)
 
         auto_row.addWidget(QLabel("置信度:"))
+        self.yolo_conf_spin = QDoubleSpinBox()
+        self.yolo_conf_spin.setRange(0.01, 1.0)
+        self.yolo_conf_spin.setSingleStep(0.05)
+        self.yolo_conf_spin.setValue(float(self.config_manager.get("inference", "conf", 0.25)))
+        auto_row.addWidget(self.yolo_conf_spin)
 
         auto_row.addWidget(QLabel("IOU:"))
+        self.yolo_iou_spin = QDoubleSpinBox()
+        self.yolo_iou_spin.setRange(0.01, 1.0)
+        self.yolo_iou_spin.setSingleStep(0.05)
+        self.yolo_iou_spin.setValue(float(self.config_manager.get("inference", "iou", 0.7)))
+        auto_row.addWidget(self.yolo_iou_spin)
 
         self.yolo_max_det_spin = QSpinBox()
         self.yolo_max_det_spin.setRange(1, 3000)
@@ -850,8 +860,18 @@ class MainWindow(QMainWindow):
         layout.addLayout(action_row)
 
         action_row.addWidget(QLabel("置信"))
+        self.yolo_conf_spin = QDoubleSpinBox()
+        self.yolo_conf_spin.setRange(0.01, 1.0)
+        self.yolo_conf_spin.setSingleStep(0.05)
+        self.yolo_conf_spin.setValue(float(self.config_manager.get("inference", "conf", 0.25)))
+        action_row.addWidget(self.yolo_conf_spin)
 
         action_row.addWidget(QLabel("IOU"))
+        self.yolo_iou_spin = QDoubleSpinBox()
+        self.yolo_iou_spin.setRange(0.01, 1.0)
+        self.yolo_iou_spin.setSingleStep(0.05)
+        self.yolo_iou_spin.setValue(float(self.config_manager.get("inference", "iou", 0.7)))
+        action_row.addWidget(self.yolo_iou_spin)
 
         self.yolo_max_det_spin = QSpinBox()
         self.yolo_max_det_spin.setRange(1, 3000)
@@ -1104,7 +1124,17 @@ class MainWindow(QMainWindow):
 
         param_row = QHBoxLayout()
         param_row.addWidget(QLabel("置信度"))
+        self.yolo_conf_spin = QDoubleSpinBox()
+        self.yolo_conf_spin.setRange(0.01, 1.0)
+        self.yolo_conf_spin.setSingleStep(0.05)
+        self.yolo_conf_spin.setValue(float(self.config_manager.get("inference", "conf", 0.25)))
+        param_row.addWidget(self.yolo_conf_spin)
         param_row.addWidget(QLabel("IOU"))
+        self.yolo_iou_spin = QDoubleSpinBox()
+        self.yolo_iou_spin.setRange(0.01, 1.0)
+        self.yolo_iou_spin.setSingleStep(0.05)
+        self.yolo_iou_spin.setValue(float(self.config_manager.get("inference", "iou", 0.7)))
+        param_row.addWidget(self.yolo_iou_spin)
         card.layout.addLayout(param_row)
 
         count_row = QHBoxLayout()
@@ -2395,8 +2425,8 @@ class MainWindow(QMainWindow):
         _class_id, target_class = class_info
 
         llm_config = load_llm_config()
-        if not llm_config.get("api_key"):
-            QMessageBox.warning(self, "提示", "请先在 LLM 配置中设置 API Key")
+        if not llm_config.get("base_url"):
+            QMessageBox.warning(self, "提示", "请先在 LLM 配置中设置 Base URL")
             self._show_auto_label_dialog_llm()
             return
 
@@ -2459,8 +2489,8 @@ class MainWindow(QMainWindow):
         class_id, target_class = class_info
 
         llm_config = load_llm_config()
-        if not llm_config.get("api_key"):
-            QMessageBox.warning(self, "提示", "请先在 LLM 配置中设置 API Key")
+        if not llm_config.get("base_url"):
+            QMessageBox.warning(self, "提示", "请先在 LLM 配置中设置 Base URL")
             self._show_auto_label_dialog_llm()
             return
 
