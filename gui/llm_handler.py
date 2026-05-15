@@ -86,8 +86,13 @@ class LLMInferenceWorker(QThread):
     def infer_image(cls, image_path: str, target_class: str, config: dict) -> list:
         import openai
 
+        # For local LLM servers (like LM Studio), api_key can be empty or any string
+        api_key = config.get("api_key", "")
+        if not api_key:
+            api_key = "not-needed"  # LM Studio and other local servers accept any non-empty key
+
         client = openai.OpenAI(
-            api_key=config.get("api_key", ""),
+            api_key=api_key,
             base_url=cls._normalize_base_url(config.get("base_url", "")),
         )
 

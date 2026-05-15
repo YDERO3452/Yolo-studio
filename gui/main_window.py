@@ -2060,6 +2060,8 @@ class MainWindow(QMainWindow):
         self._yolo_label_worker = YOLOAutoLabelWorker(
             self.model_manager,
             image_paths,
+            conf=self.yolo_conf_spin.value(),
+            iou=self.yolo_iou_spin.value(),
             max_det=self.yolo_max_det_spin.value(),
         )
         self._yolo_label_worker.moveToThread(self._yolo_label_thread)
