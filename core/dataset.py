@@ -477,16 +477,21 @@ class DatasetManager:
 
         This moves files from:
             images/*.jpg → images/train/*.jpg, images/val/*.jpg, …
+            images/subdir/*.jpg → images/train/*.jpg, images/val/*.jpg, …
             labels/*.txt → labels/train/*.txt, labels/val/*.txt, …
         """
         image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
 
-        # Collect images (only top-level, not already in subdirs)
+        # Collect images (recursively from all subdirs, excluding train/val/test)
+        excluded_dirs = {"train", "val", "test"}
         image_files = sorted([
-            f for f in images_path.iterdir()
-            if f.is_file() and f.suffix.lower() in image_extensions
+            f for f in images_path.rglob("*")
+            if f.is_file()
+            and f.suffix.lower() in image_extensions
+            and not any(part in excluded_dirs for part in f.relative_to(images_path).parts[:-1])
         ])
         if not image_files:
+            logger.warning(f"No images found in {images_path} for splitting")
             return
 
         random.shuffle(image_files)
@@ -518,9 +523,10 @@ class DatasetManager:
                 # Move image
                 dest_img = img_dir / img_file.name
                 shutil.move(str(img_file), str(dest_img))
-                # Move label
-                label_file = labels_path / (img_file.stem + ".txt")
-                if label_file.exists():
+                # Move label - search recursively in labels_path
+                label_candidates = list(labels_path.rglob(img_file.stem + ".txt"))
+                if label_candidates:
+                    label_file = label_candidates[0]  # Take first match
                     dest_lbl = lbl_dir / label_file.name
                     shutil.move(str(label_file), str(dest_lbl))
 
