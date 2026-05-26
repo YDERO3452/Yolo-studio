@@ -571,6 +571,12 @@ class TrainingPanel(QWidget):
 
         font_group.setLayout(font_layout)
 
+        # Auto-detect font in project root
+        detected = self._auto_detect_font()
+        if detected:
+            self.font_path_edit.setText(detected)
+            self._update_font_status()
+
         # Training templates
         template_group = QGroupBox("训练模板")
         template_layout = QVBoxLayout()
@@ -1019,6 +1025,20 @@ class TrainingPanel(QWidget):
             self.font_path_edit.setText(path)
             self._update_font_status()
 
+    def _auto_detect_font(self) -> str:
+        """Auto-detect Arial.Unicode.ttf in project root or common locations."""
+        candidates = [
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Arial.Unicode.ttf"),
+            os.path.join(os.getcwd(), "Arial.Unicode.ttf"),
+            os.path.join(os.path.expanduser("~"), "AppData", "Roaming", "Ultralytics", "Arial.Unicode.ttf"),
+            os.path.join(os.path.expanduser("~"), ".config", "Ultralytics", "Arial.Unicode.ttf"),
+        ]
+        for path in candidates:
+            if os.path.isfile(path):
+                logger.info(f"Auto-detected font: {path}")
+                return path
+        return ""
+
     def _update_font_status(self):
         """Update the font status label."""
         font_path = self.font_path_edit.text().strip()
@@ -1120,6 +1140,8 @@ class TrainingPanel(QWidget):
 
         # Inject font to avoid ultralytics downloading Arial.Unicode.ttf from internet
         font_path = self.font_path_edit.text().strip()
+        if not font_path:
+            font_path = self._auto_detect_font()
         if font_path:
             self._setup_font_for_training(font_path)
             self.log_text.append(f"字体已注入: {font_path}")
