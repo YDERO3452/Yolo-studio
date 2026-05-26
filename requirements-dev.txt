@@ -1,0 +1,4 @@
+# YOLO Studio - Development Dependencies
+pytest>=8.0
+pytest-mock>=3.12
+pytest-cov>=4.1

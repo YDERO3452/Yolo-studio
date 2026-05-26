@@ -14,6 +14,12 @@ EzYOLO/
 config/llm_config.json
 .claude/
 
+# Test & coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+*.coverage.*
+
 .DS_Store
 Thumbs.db
 
