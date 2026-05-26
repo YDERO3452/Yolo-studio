@@ -1154,6 +1154,22 @@ class TrainingPanel(QWidget):
 
         model_name = self._get_selected_model()
 
+        # Model size factor: larger models need more VRAM per image
+        m = model_name.lower()
+        if "x" in m or "e" in m:
+            model_factor = 0.35
+        elif "l" in m:
+            model_factor = 0.5
+        elif "m" in m:
+            model_factor = 0.65
+        elif "s" in m:
+            model_factor = 0.8
+        else:  # nano
+            model_factor = 1.0
+        # Segmentation/pose/OBB tasks use ~30% more VRAM
+        if any(t in m for t in ("-seg", "-pose", "-obb")):
+            model_factor *= 0.7
+
         # ── Heuristics ──────────────────────────────────────────
         changes = []
 
@@ -1173,23 +1189,30 @@ class TrainingPanel(QWidget):
         self.epochs_spin.setValue(epochs)
         changes.append(f"epochs → {epochs}")
 
-        # batch: based on GPU VRAM (leaves ~1GB headroom for framework overhead)
-        if vram_gb >= 24:
+        # batch: based on GPU VRAM, scaled by model size factor
+        usable_vram = max(1, vram_gb - 1.0)  # leave ~1GB headroom for framework
+        raw_batch = int(usable_vram * 4 * model_factor)  # ~4 images per GB for nano@640
+        # Snap to reasonable multiples
+        if raw_batch >= 128:
+            batch = 128
+        elif raw_batch >= 96:
+            batch = 96
+        elif raw_batch >= 64:
             batch = 64
-        elif vram_gb >= 12:
+        elif raw_batch >= 48:
             batch = 48
-        elif vram_gb >= 8:
+        elif raw_batch >= 32:
             batch = 32
-        elif vram_gb >= 6:
+        elif raw_batch >= 24:
             batch = 24
-        elif vram_gb >= 4:
+        elif raw_batch >= 16:
             batch = 16
-        elif vram_gb >= 2:
+        elif raw_batch >= 8:
             batch = 8
         else:
             batch = 4
         self.batch_spin.setValue(batch)
-        changes.append(f"batch → {batch}")
+        changes.append(f"batch → {batch} ({model_factor:.0%} factor)")
 
         # imgsz: 640 for 4GB+, otherwise scale down
         if vram_gb >= 4:
