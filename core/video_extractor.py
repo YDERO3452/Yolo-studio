@@ -270,6 +270,35 @@ class VideoFrameExtractor:
             return 1.0 if norm_a == norm_b else 0.0
         return float(np.dot(a, b) / (norm_a * norm_b))
 
+    def save_current_frame(self, output_dir: str, frame_idx: Optional[int] = None) -> Optional[str]:
+        """Save the current (or specified) frame to disk.
+
+        Preserves the current playback position after saving.
+
+        Args:
+            output_dir: Directory to save the frame.
+            frame_idx: Specific frame index (0-based). If None, saves the
+                current playback position.
+
+        Returns:
+            Path to saved image, or None on failure.
+        """
+        if not self.is_opened():
+            return None
+
+        saved_pos = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
+        target_idx = frame_idx if frame_idx is not None else saved_pos
+
+        self.seek_frame(target_idx)
+        ret, frame = self.cap.read()
+        self.seek_frame(saved_pos)
+
+        if not ret or frame is None:
+            return None
+
+        os.makedirs(output_dir, exist_ok=True)
+        return self._save_frame(frame, output_dir, target_idx)
+
     def _save_frame(self, frame: np.ndarray, output_dir: str, frame_idx: int) -> Optional[str]:
         """Save a frame as a JPEG file."""
         video_name = Path(self.video_path).stem if self.video_path else "frame"
