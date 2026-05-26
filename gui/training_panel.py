@@ -408,6 +408,10 @@ class TrainingPanel(QWidget):
         self._epoch_timer = QTimer(self)
         self._epoch_timer.setInterval(500)  # poll every 500 ms
         self._epoch_timer.timeout.connect(self._poll_epoch_updates)
+        # Early stopping tracking
+        self._best_map = 0.0
+        self._best_map_epoch = 0
+        self._no_improve_count = 0
         self.init_ui()
 
     def init_ui(self):
@@ -881,6 +885,12 @@ class TrainingPanel(QWidget):
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         control_layout.addWidget(self.progress_bar)
+
+        self.early_stop_label = QLabel("")
+        self.early_stop_label.setStyleSheet(f"color: {Theme.TEXT_MUTED}; font-size: 12px; padding: 4px 0;")
+        self.early_stop_label.setVisible(False)
+        control_layout.addWidget(self.early_stop_label)
+
         control_group.setLayout(control_layout)
         right_layout.addWidget(control_group)
 
@@ -1406,6 +1416,12 @@ class TrainingPanel(QWidget):
         self.log_text.append(f"训练开始...\n模型: {args['model']}\n数据: {args['data_yaml']}\n")
         self.training_chart.clear_chart()
 
+        # Reset early stopping tracking
+        self._best_map = 0.0
+        self._best_map_epoch = 0
+        self._no_improve_count = 0
+        self.early_stop_label.setVisible(False)
+
         self.training_started.emit()
 
         # Reset live metrics
@@ -1485,6 +1501,31 @@ class TrainingPanel(QWidget):
             if parts:
                 self.log_text.append(f"  [Epoch {epoch}] {' | '.join(parts)}")
 
+        # Track best mAP for early stopping display
+        current_map = metrics.get("metrics/mAP50-95(B)", 0)
+        if current_map > 0:
+            if current_map > self._best_map + 0.001:  # 0.1% improvement threshold
+                self._best_map = current_map
+                self._best_map_epoch = epoch
+                self._no_improve_count = 0
+            else:
+                self._no_improve_count += 1
+
+            patience = self.patience_spin.value()
+            if patience > 0:
+                remaining = patience - self._no_improve_count
+                color = "#3fb950" if self._no_improve_count == 0 else (
+                    "#f85149" if remaining < patience * 0.3 else "#d29922"
+                )
+                self.early_stop_label.setText(
+                    f"Best mAP: {self._best_map:.4f} @ epoch {self._best_map_epoch}  |  "
+                    f"未提升: {self._no_improve_count}/{patience} 轮"
+                )
+                self.early_stop_label.setStyleSheet(
+                    f"color: {color}; font-size: 12px; padding: 4px 0; font-weight: bold;"
+                )
+                self.early_stop_label.setVisible(True)
+
     def on_finished(self, result: dict):
         """Handle training completion."""
         # Stop epoch polling timer
@@ -1500,6 +1541,15 @@ class TrainingPanel(QWidget):
 
         if result.get("success"):
             self.progress_bar.setValue(100)
+
+            # Show best mAP summary in the early stop label
+            if self._best_map > 0:
+                self.early_stop_label.setText(
+                    f"训练完成 — Best mAP50-95: {self._best_map:.4f} @ epoch {self._best_map_epoch}"
+                )
+                self.early_stop_label.setStyleSheet("color: #3fb950; font-size: 12px; padding: 4px 0; font-weight: bold;")
+                self.early_stop_label.setVisible(True)
+
             save_dir = result.get("save_dir") or "unknown"
             self.log_text.append(f"\n训练完成! 结果保存在: {save_dir}")
 
