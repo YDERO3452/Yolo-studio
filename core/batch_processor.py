@@ -7,13 +7,11 @@ Architecture overview:
 - Error handling and logging
 """
 
-import os
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Callable
 from dataclasses import dataclass
 from loguru import logger
 import json
-from datetime import datetime
 
 from core.model_manager import ModelManager
 from core.format_converter import FormatConverter
@@ -301,53 +299,3 @@ class BatchProcessor:
 
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(root_str)
-
-    def get_statistics(self) -> Dict[str, Any]:
-        """Get statistics from batch processing results.
-
-        Returns:
-            Dictionary with statistics
-        """
-        total = len(self.results)
-        successful = sum(1 for r in self.results if r.success)
-        failed = total - successful
-        total_detections = sum(len(r.detections) if r.detections else 0 for r in self.results)
-        total_time = sum(r.processing_time for r in self.results)
-
-        return {
-            "total_images": total,
-            "successful": successful,
-            "failed": failed,
-            "success_rate": successful / total if total > 0 else 0,
-            "total_detections": total_detections,
-            "avg_detections_per_image": total_detections / successful if successful > 0 else 0,
-            "total_processing_time": total_time,
-            "avg_processing_time": total_time / total if total > 0 else 0,
-        }
-
-    def save_report(self, report_path: str) -> None:
-        """Save processing report to file.
-
-        Args:
-            report_path: Path to save report
-        """
-        stats = self.get_statistics()
-        report = {
-            "timestamp": datetime.now().isoformat(),
-            "statistics": stats,
-            "results": [
-                {
-                    "image_path": r.image_path,
-                    "success": r.success,
-                    "detections_count": len(r.detections) if r.detections else 0,
-                    "error_message": r.error_message,
-                    "processing_time": r.processing_time,
-                }
-                for r in self.results
-            ]
-        }
-
-        with open(report_path, "w", encoding="utf-8") as f:
-            json.dump(report, f, indent=2)
-
-        logger.info(f"Report saved to {report_path}")

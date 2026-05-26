@@ -212,30 +212,6 @@ def _query_nvidia_smi() -> Optional[dict]:
         return None
 
 
-def get_device_info() -> dict:
-    """Get a summary of available compute devices."""
-    detection = detect_cuda()
-    return {
-        "cuda_available": detection.cuda_available,
-        "cuda_version": detection.cuda_version,
-        "driver_version": detection.driver_version,
-        "torch_version": detection.torch_version,
-        "gpu_count": detection.gpu_count,
-        "gpus": [
-            {
-                "index": g.index,
-                "name": g.name,
-                "vram_total_mb": g.vram_total_mb,
-                "vram_free_mb": g.vram_free_mb,
-                "temperature": g.temperature,
-                "utilization": g.utilization,
-            }
-            for g in detection.gpus
-        ],
-        "recommended_device": detection.recommended_device,
-        "error": detection.error,
-    }
-
 
 def format_gpu_summary(detection: CUDADetection) -> str:
     """Format a human-readable GPU summary string."""

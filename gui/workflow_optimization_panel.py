@@ -13,7 +13,7 @@ from typing import Optional, List
 from loguru import logger
 
 from core.workflow_optimizer import (
-    BatchProcessor, AnnotationValidator, DataQualityChecker, PresetManager
+    WorkflowBatchProcessor, AnnotationValidator, DataQualityChecker, PresetManager
 )
 from core.class_manager import ClassManager
 
@@ -29,7 +29,7 @@ class WorkflowOptimizationPanel(QWidget):
     def __init__(self, class_manager: ClassManager, parent=None):
         super().__init__(parent)
         self.class_manager = class_manager
-        self.batch_processor = BatchProcessor()
+        self.batch_processor = WorkflowBatchProcessor()
         self.validator = AnnotationValidator()
         self.quality_checker = DataQualityChecker()
         self.preset_manager = PresetManager()

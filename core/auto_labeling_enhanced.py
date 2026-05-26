@@ -10,7 +10,6 @@ Architecture overview:
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 from loguru import logger
-import json
 from pathlib import Path
 
 from core.model_manager import ModelManager
@@ -52,64 +51,6 @@ class AutoLabelingEngine:
         self.config: Optional[AutoLabelingConfig] = None
         self.last_results: Optional[List[Dict[str, Any]]] = None
         logger.info("AutoLabelingEngine initialized")
-
-    def load_config(self, config_path: str) -> bool:
-        """Load configuration from JSON file.
-
-        Args:
-            config_path: Path to configuration file
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                config_dict = json.load(f)
-
-            self.config = AutoLabelingConfig(**config_dict)
-            logger.info(f"Configuration loaded from {config_path}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to load configuration: {e}")
-            return False
-
-    def save_config(self, config_path: str) -> bool:
-        """Save current configuration to JSON file.
-
-        Args:
-            config_path: Path to save configuration
-
-        Returns:
-            True if successful, False otherwise
-        """
-        if self.config is None:
-            logger.error("No configuration to save")
-            return False
-
-        try:
-            config_dict = {
-                "model_name": self.config.model_name,
-                "conf_threshold": self.config.conf_threshold,
-                "iou_threshold": self.config.iou_threshold,
-                "max_detections": self.config.max_detections,
-                "output_mode": self.config.output_mode,
-                "preserve_existing": self.config.preserve_existing,
-                "auto_save": self.config.auto_save,
-                "device": self.config.device,
-                "custom_params": self.config.custom_params,
-            }
-
-            Path(config_path).parent.mkdir(parents=True, exist_ok=True)
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(config_dict, f, indent=2)
-
-            logger.info(f"Configuration saved to {config_path}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to save configuration: {e}")
-            return False
 
     def set_config(self, config: AutoLabelingConfig) -> None:
         """Set auto-labeling configuration.

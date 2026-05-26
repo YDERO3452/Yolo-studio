@@ -1,6 +1,5 @@
 """Annotation module — supports bbox, polygon, OBB, and keypoint annotations."""
 
-import copy
 import os
 from enum import Enum
 from pathlib import Path
@@ -39,9 +38,6 @@ class Annotation:
     def to_canvas_shape(self, img_width: int, img_height: int) -> dict:
         """Convert to a canvas-ready dict for rendering."""
         raise NotImplementedError
-
-    def copy(self):
-        return copy.deepcopy(self)
 
     @staticmethod
     def from_yolo_line(line: str) -> "Annotation":
@@ -443,69 +439,6 @@ class AnnotationManager:
     def get_annotation_count(self) -> int:
         return len(self.current_annotations)
 
-    def draw_annotations(self, image: np.ndarray, annotations: Optional[list] = None,
-                         selected_index: int = -1) -> np.ndarray:
-        """Draw annotations on an image using OpenCV."""
-        annotated = image.copy()
-        annotations = annotations or self.current_annotations
-        h, w = image.shape[:2]
-
-        colors = [
-            (255, 0, 0), (0, 255, 0), (0, 0, 255),
-            (255, 255, 0), (255, 0, 255), (0, 255, 255),
-            (128, 0, 0), (0, 128, 0), (0, 0, 128),
-            (128, 128, 0), (128, 0, 128), (0, 128, 128),
-        ]
-
-        for i, ann in enumerate(annotations):
-            color = colors[ann.class_id % len(colors)]
-            class_name = self.classes[ann.class_id] if ann.class_id < len(self.classes) else str(ann.class_id)
-            selected = (i == selected_index)
-
-            if isinstance(ann, BBoxAnnotation):
-                x1, y1, x2, y2 = ann.to_xyxy(w, h)
-                if selected:
-                    cv2.rectangle(annotated, (x1 - 2, y1 - 2), (x2 + 2, y2 + 2), (0, 255, 255), 3)
-                cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
-                self._draw_label(annotated, class_name, x1, y1, color)
-
-            elif isinstance(ann, PolygonAnnotation):
-                pts = np.array([(round(px * w), round(py * h)) for px, py in ann.points], dtype=np.int32)
-                if selected:
-                    cv2.polylines(annotated, [pts], True, (0, 255, 255), 3)
-                cv2.polylines(annotated, [pts], True, color, 2)
-                if len(pts) > 0:
-                    self._draw_label(annotated, class_name, pts[0][0], pts[0][1], color)
-
-            elif isinstance(ann, OBBoxAnnotation):
-                pts = np.array([(round(px * w), round(py * h)) for px, py in ann.corners], dtype=np.int32)
-                if selected:
-                    cv2.polylines(annotated, [pts], True, (0, 255, 255), 3)
-                cv2.polylines(annotated, [pts], True, color, 2)
-                if len(pts) > 0:
-                    self._draw_label(annotated, class_name, pts[0][0], pts[0][1], color)
-
-            elif isinstance(ann, KeypointAnnotation):
-                x1, y1, x2, y2 = ann._bbox_xyxy(w, h)
-                if selected:
-                    cv2.rectangle(annotated, (x1 - 2, y1 - 2), (x2 + 2, y2 + 2), (0, 255, 255), 3)
-                cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 1)
-                self._draw_label(annotated, class_name, x1, y1, color)
-                # Draw keypoints
-                kp_colors = {0: (128, 128, 128), 1: (0, 255, 255), 2: (0, 255, 0)}
-                for kx, ky, vis in ann.keypoints:
-                    kpx, kpy = round(kx * w), round(ky * h)
-                    kp_color = kp_colors.get(vis, (255, 255, 255))
-                    cv2.circle(annotated, (kpx, kpy), 4, kp_color, -1)
-
-        return annotated
-
-    @staticmethod
-    def _draw_label(image, label, x, y, color):
-        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
-        cv2.rectangle(image, (x, y - th - 10), (x + tw, y), color, -1)
-        cv2.putText(image, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-
     def _get_label_path(self, image_path: str) -> str:
         img_path = Path(image_path)
         parent = img_path.parent
@@ -549,37 +482,3 @@ class AnnotationManager:
 
         return stats
 
-    @staticmethod
-    def convert_voc_to_yolo(xml_path: str, img_width: int, img_height: int, class_map: dict) -> list[BBoxAnnotation]:
-        """Convert Pascal VOC XML to YOLO format."""
-        import xml.etree.ElementTree as ET
-
-        tree = ET.parse(xml_path)
-        root = tree.getroot()
-
-        boxes = []
-        for obj in root.findall("object"):
-            class_name = obj.find("name").text
-            if class_name not in class_map:
-                continue
-
-            class_id = class_map[class_name]
-            bbox = obj.find("bndbox")
-            x1 = int(bbox.find("xmin").text)
-            y1 = int(bbox.find("ymin").text)
-            x2 = int(bbox.find("xmax").text)
-            y2 = int(bbox.find("ymax").text)
-
-            boxes.append(BBoxAnnotation.from_xyxy(class_id, x1, y1, x2, y2, img_width, img_height))
-
-        return boxes
-
-    @staticmethod
-    def convert_coco_to_yolo(coco_annotation: dict, img_width: int, img_height: int) -> BBoxAnnotation:
-        """Convert COCO format annotation to YOLO format."""
-        x, y, w, h = coco_annotation["bbox"]
-        x_center = (x + w / 2) / img_width
-        y_center = (y + h / 2) / img_height
-        width = w / img_width
-        height = h / img_height
-        return BBoxAnnotation(coco_annotation["category_id"], x_center, y_center, width, height)

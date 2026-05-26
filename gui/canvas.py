@@ -13,6 +13,8 @@ from PyQt6.QtGui import (
 import cv2
 import numpy as np
 
+from core.annotation import ShapeType
+
 class CanvasMode(str, Enum):
     EDIT = "edit"
     CREATE_BBOX = "create_bbox"
@@ -145,14 +147,6 @@ class AnnotationCanvas(QWidget):
         """Set the current drawing class by index."""
         self.current_class_id = class_id
 
-    def set_cross_line(self, show: bool, width: float = 1.0, color: str = "#00FF00", opacity: float = 0.5):
-        """Set crosshair guide options."""
-        self.crosshair_show = show
-        self.crosshair_width = width
-        self.crosshair_color = color
-        self.crosshair_opacity = opacity
-        self.update()
-
     def load_image(self, image_path: str) -> bool:
         # Use numpy to read file (handles non-ASCII paths like Chinese characters)
         try:
@@ -171,11 +165,6 @@ class AnnotationCanvas(QWidget):
         self._contrast = 0
         self.fit_to_window()
         return True
-
-    def load_image_array(self, image: np.ndarray):
-        self.original_image = image.copy()
-        self.image_height, self.image_width = self.original_image.shape[:2]
-        self.fit_to_window()
 
     def fit_to_window(self, target_size=None):
         if self.original_image is None:
@@ -207,8 +196,6 @@ class AnnotationCanvas(QWidget):
     def clear_shapes(self):
         self.shapes.clear()
         self.selected_shape = -1
-        self.update()
-
         self.update()
 
     def cancel_drawing(self):
@@ -384,7 +371,6 @@ class AnnotationCanvas(QWidget):
         painter.end()
 
     def _paint_shape(self, painter, shape, index, ox, oy, scale):
-        from core.annotation import ShapeType
         stype = _shape_type_value(shape["type"])
         cid = shape["class_id"]
         data = shape["data"]
@@ -470,7 +456,6 @@ class AnnotationCanvas(QWidget):
                 self._draw_label(painter, self.classes[cid], sx1, sy1, color)
 
     def _paint_active_drawing(self, painter, ox, oy, scale):
-        from core.annotation import ShapeType
 
         if self.drawing_bbox:
             pen = QPen(QColor(255, 255, 0), 2, Qt.PenStyle.DashLine)
@@ -542,7 +527,6 @@ class AnnotationCanvas(QWidget):
     # ------------------------------------------------------------------
 
     def mousePressEvent(self, event):
-        from core.annotation import ShapeType
         pos = event.pos()
 
         if event.button() == Qt.MouseButton.MiddleButton:
@@ -628,7 +612,6 @@ class AnnotationCanvas(QWidget):
                 self.shape_deleted.emit(clicked)
 
     def mouseMoveEvent(self, event):
-        from core.annotation import ShapeType
         pos = event.pos()
 
         # Track mouse position for crosshair
@@ -675,7 +658,6 @@ class AnnotationCanvas(QWidget):
             self.update()
 
     def mouseReleaseEvent(self, event):
-        from core.annotation import ShapeType
 
         if event.button() == Qt.MouseButton.MiddleButton:
             self.panning = False
@@ -852,7 +834,6 @@ class AnnotationCanvas(QWidget):
     # ------------------------------------------------------------------
 
     def _finish_polygon(self):
-        from core.annotation import ShapeType
         self.drawing_polygon = False
         # Remove the trailing live-cursor point before converting
         if self.polygon_points and len(self.polygon_points) >= 2:
@@ -878,7 +859,6 @@ class AnnotationCanvas(QWidget):
     # ------------------------------------------------------------------
 
     def _get_shape_at(self, pos: QPoint) -> int:
-        from core.annotation import ShapeType
         ox, oy, scale = self._get_transform()
 
         for i in reversed(range(len(self.shapes))):
@@ -925,7 +905,6 @@ class AnnotationCanvas(QWidget):
 
     def _get_resize_handle(self, pos: QPoint):
         """Returns (handle_name, vertex_index) or (None, -1)."""
-        from core.annotation import ShapeType
         if self.selected_shape < 0:
             return None, -1
 
@@ -976,7 +955,6 @@ class AnnotationCanvas(QWidget):
     # ------------------------------------------------------------------
 
     def _move_shape(self, index, dx, dy):
-        from core.annotation import ShapeType
         shape = self.shapes[index]
         stype = _shape_type_value(shape["type"])
         data = shape["data"]
@@ -1000,7 +978,6 @@ class AnnotationCanvas(QWidget):
             data["corners"] = [(int(cx + dix), int(cy + diy)) for cx, cy in data["corners"]]
 
     def _resize_shape(self, index, pos):
-        from core.annotation import ShapeType
         shape = self.shapes[index]
         stype = _shape_type_value(shape["type"])
         data = shape["data"]

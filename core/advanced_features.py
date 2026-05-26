@@ -1,6 +1,5 @@
 """Advanced features module for annotation statistics and reporting."""
 
-import os
 import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple

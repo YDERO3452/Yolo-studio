@@ -193,69 +193,6 @@ class VideoFrameExtractor:
         logger.info(f"Extracted {len(saved_paths)} frames to {output_dir}")
         return saved_paths
 
-    def extract_by_seconds(
-        self,
-        output_dir: str,
-        every_seconds: float = 1.0,
-        dedup: bool = True,
-        dedup_threshold: int = 8,
-        max_frames: int = 0,
-        progress_callback: Optional[Callable[[int, int], None]] = None,
-    ) -> list[str]:
-        """Extract frames at regular time intervals.
-
-        Convenience wrapper around extract_auto with mode="interval" by seconds.
-        """
-        if not self.is_opened() or self.fps <= 0:
-            return []
-
-        interval_frames = max(1, int(self.fps * every_seconds))
-        return self.extract_auto(
-            output_dir,
-            mode="interval",
-            interval_frames=interval_frames,
-            dedup=dedup,
-            dedup_threshold=dedup_threshold,
-            max_frames=max_frames,
-            progress_callback=progress_callback,
-        )
-
-    # ------------------------------------------------------------------
-    # Manual extraction
-    # ------------------------------------------------------------------
-
-    def save_current_frame(self, output_dir: str, frame_idx: Optional[int] = None) -> Optional[str]:
-        """Save the current (or specified) frame to disk.
-
-        Preserves the current playback position after saving.
-
-        Returns:
-            Path to saved image, or None on failure.
-        """
-        if not self.is_opened():
-            return None
-
-        # Save current position so we can restore it later
-        saved_pos = int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
-
-        if frame_idx is not None:
-            target_idx = frame_idx
-        else:
-            target_idx = saved_pos
-
-        # Seek to target, read, then restore position
-        self.seek_frame(target_idx)
-        ret, frame = self.cap.read()
-
-        # Restore playback position regardless of read result
-        self.seek_frame(saved_pos)
-
-        if not ret or frame is None:
-            return None
-
-        os.makedirs(output_dir, exist_ok=True)
-        return self._save_frame(frame, output_dir, target_idx)
-
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

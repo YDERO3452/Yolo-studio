@@ -1,6 +1,5 @@
 """Workflow optimization module for batch processing and quality checks."""
 
-import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
@@ -22,7 +21,7 @@ class QualityMetrics:
     duplicate_annotations: List[str]
 
 
-class BatchProcessor:
+class WorkflowBatchProcessor:
     """Batch processing for annotations."""
 
     def __init__(self):
@@ -141,7 +140,8 @@ class BatchProcessor:
 
                     with open(output_file, "w", encoding="utf-8") as f:
                         for det in detections:
-                            line = f"{det['class_id']} {det['x1']:.6f} {det['y1']:.6f} {det['x2']:.6f} {det['y2']:.6f}\n"
+                            bbox = det.get("bbox", [0, 0, 0, 0])
+                            line = f"{det['class_id']} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}\n"
                             f.write(line)
 
                     results["successful"] += 1
@@ -156,15 +156,6 @@ class BatchProcessor:
 
         return results
 
-    @staticmethod
-    def _find_image_file(image_dir: str, image_name: str) -> Optional[Path]:
-        """Find image file by name."""
-        image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
-        for ext in image_extensions:
-            image_file = Path(image_dir) / f"{image_name}{ext}"
-            if image_file.exists():
-                return image_file
-        return None
 
 
 class AnnotationValidator:

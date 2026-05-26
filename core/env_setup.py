@@ -199,12 +199,6 @@ def _default_pytorch_download_dir(wheel_tag: str) -> Path:
     return Path.home() / "Downloads" / f"pytorch-{wheel_tag}"
 
 
-def get_pytorch_download_url(env: "EnvInfo") -> str:
-    """Return the official PyTorch wheel directory for this machine."""
-    plan = get_pytorch_install_plan(env)
-    return f"{_pytorch_index_url(_plan_wheel_tag(plan))}/"
-
-
 def get_pytorch_install_commands(
     env: "EnvInfo",
     download_dir: str | Path | None = None,
@@ -1652,15 +1646,6 @@ def _get_pytorch_install_cmd(env: EnvInfo) -> str:
     return "# 当前 PyTorch CUDA 已可用，无需重装"
 
 
-def _get_mirror_install_cmds(env: EnvInfo) -> list[str]:
-    """Deprecated compatibility hook.
-
-    Do not recommend domestic PyTorch mirrors: CUDA wheel availability is
-    inconsistent. The UI now points users to the official wheel directory and
-    supports installing local .whl files selected by the user.
-    """
-    return []
-
 
 # -----------------------------------------------------------------------
 # Formatting
@@ -1679,25 +1664,6 @@ def format_diagnosis_summary(items: list[DiagnosisItem]) -> str:
         lines.append("")
     return "\n".join(lines)
 
-
-def format_diagnosis_html(items: list[DiagnosisItem]) -> str:
-    html_parts = []
-    for item in items:
-        color = {
-            "ok": "#34C759", "warning": "#FFD60A",
-            "error": "#FF453A", "info": "#5AC8FA",
-        }.get(item.level, "#aaa")
-        icon = {"ok": "&#10003;", "warning": "&#9888;", "error": "&#10007;", "info": "&#8505;"}.get(item.level, "")
-
-        html = f'<p style="color:{color}; margin:4px 0;">{icon} <b>{item.title}</b></p>'
-        if item.detail:
-            detail_escaped = item.detail.replace("\n", "<br>")
-            html += f'<p style="color:#aaa; margin:2px 0 2px 24px; font-size:12px;">{detail_escaped}</p>'
-        if item.action:
-            action_escaped = item.action.replace("\n", "<br>")
-            html += f'<p style="color:#5AC8FA; margin:2px 0 2px 24px; font-size:12px;">-> {action_escaped}</p>'
-        html_parts.append(html)
-    return "".join(html_parts)
 
 
 # -----------------------------------------------------------------------

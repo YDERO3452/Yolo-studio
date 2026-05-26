@@ -761,15 +761,6 @@ class FormatConverter:
         """Get file extension for format."""
         return self.FORMAT_EXTENSIONS.get(format_name, 'txt')
 
-    def _find_image_file(self, annotation_file: Path) -> Optional[Path]:
-        """Find corresponding image file."""
-        image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp']
-        for ext in image_extensions:
-            image_file = annotation_file.with_suffix(ext)
-            if image_file.exists():
-                return image_file
-        return None
-
     def validate_format(self, file_path: str, format_name: str) -> Tuple[bool, List[str]]:
         """Validate annotation file format.
 

@@ -62,19 +62,6 @@ class ModelExporter:
             kwargs["opset"] = opset
         return self.export(**kwargs)
 
-    def export_torchscript(self, imgsz: int = 640) -> dict:
-        """Export model to TorchScript format."""
-        return self.export(format="torchscript", imgsz=imgsz)
-
-    def export_tensorrt(self, imgsz: int = 640, half: bool = False, dynamic: bool = False) -> dict:
-        """Export model to TensorRT format."""
-        return self.export(
-            format="engine",
-            imgsz=imgsz,
-            half=half,
-            dynamic=dynamic,
-        )
-
     @staticmethod
     def get_supported_formats() -> dict:
         """Get list of supported export formats."""
