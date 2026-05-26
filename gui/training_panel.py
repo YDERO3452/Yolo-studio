@@ -577,6 +577,15 @@ class TrainingPanel(QWidget):
             self.font_path_edit.setText(detected)
             self._update_font_status()
 
+        # Smart recommendation
+        smart_group = QGroupBox("智能推荐")
+        smart_layout = QVBoxLayout()
+        self.recommend_btn = QPushButton("分析数据集并推荐参数")
+        self.recommend_btn.setObjectName("PrimaryButton")
+        self.recommend_btn.clicked.connect(self._auto_recommend_params)
+        smart_layout.addWidget(self.recommend_btn)
+        smart_group.setLayout(smart_layout)
+
         # Training templates
         template_group = QGroupBox("训练模板")
         template_layout = QVBoxLayout()
@@ -802,6 +811,7 @@ class TrainingPanel(QWidget):
         setup_layout.addWidget(device_group)
         setup_layout.addWidget(save_group)
         setup_layout.addWidget(font_group)
+        setup_layout.addWidget(smart_group)
         setup_layout.addWidget(template_group)
         setup_layout.addStretch()
         settings_tabs.addTab(setup_tab, "运行设置")
@@ -1081,6 +1091,214 @@ class TrainingPanel(QWidget):
         except Exception as e:
             logger.warning(f"Failed to inject font: {e}")
             return False
+
+    def _auto_recommend_params(self):
+        """Analyze data.yaml and GPU, then auto-adjust training parameters.
+
+        Heuristics based on:
+        - Dataset size (few images → more epochs, less augmentation)
+        - GPU VRAM (low VRAM → smaller batch/imgsz, no AMP on old cards)
+        - Number of classes
+        - Windows vs Linux (worker handling)
+        """
+        data_yaml = self.data_yaml_edit.text().strip()
+        if not data_yaml or not os.path.isfile(data_yaml):
+            QMessageBox.warning(self, "提示", "请先选择有效的 data.yaml 文件")
+            return
+
+        # Parse data.yaml
+        try:
+            import yaml
+        except ImportError:
+            QMessageBox.critical(self, "错误", "需要安装 PyYAML: pip install pyyaml")
+            return
+
+        with open(data_yaml, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+
+        yaml_dir = os.path.dirname(os.path.abspath(data_yaml))
+
+        def _count_images(dir_path: str) -> int:
+            if not dir_path or not os.path.isdir(dir_path):
+                return 0
+            exts = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+            return sum(
+                1 for f in os.listdir(dir_path)
+                if os.path.isfile(os.path.join(dir_path, f))
+                and os.path.splitext(f)[1].lower() in exts
+            )
+
+        # Resolve paths relative to yaml dir
+        train_path = data.get("train", "")
+        if train_path and not os.path.isabs(train_path):
+            train_path = os.path.join(yaml_dir, train_path)
+        val_path = data.get("val", "")
+        if val_path and not os.path.isabs(val_path):
+            val_path = os.path.join(yaml_dir, val_path)
+
+        train_count = _count_images(train_path)
+        val_count = _count_images(val_path)
+        total = train_count + val_count
+        nc = data.get("nc", 1)
+
+        # GPU info
+        vram_gb = 0
+        is_nvidia = False
+        cc = ""
+        if self.gpu_detection.cuda_available and self.gpu_detection.gpus:
+            gpu = self.gpu_detection.gpus[0]
+            vram_gb = (gpu.vram_total_mb or 0) / 1024
+            is_nvidia = gpu.name and "nvidia" in gpu.name.lower()
+            # Read compute capability if stored
+            cc = getattr(gpu, "compute_capability", "")
+
+        model_name = self._get_selected_model()
+
+        # ── Heuristics ──────────────────────────────────────────
+        changes = []
+
+        # epochs: fewer images → more epochs
+        if total < 30:
+            epochs = 300
+        elif total < 100:
+            epochs = 200
+        elif total < 500:
+            epochs = 150
+        elif total < 2000:
+            epochs = 100
+        elif total < 10000:
+            epochs = 60
+        else:
+            epochs = 30
+        self.epochs_spin.setValue(epochs)
+        changes.append(f"epochs → {epochs}")
+
+        # batch: based on GPU VRAM
+        if vram_gb >= 24:
+            batch = 64
+        elif vram_gb >= 12:
+            batch = 32
+        elif vram_gb >= 8:
+            batch = 16
+        elif vram_gb >= 6:
+            batch = 8
+        elif vram_gb >= 4:
+            batch = 6
+        else:
+            batch = 4
+        self.batch_spin.setValue(batch)
+        changes.append(f"batch → {batch}")
+
+        # imgsz: based on VRAM
+        if vram_gb >= 8:
+            imgsz = 640
+        elif vram_gb >= 4:
+            imgsz = 480
+        else:
+            imgsz = 320
+        self.imgsz_spin.setValue(imgsz)
+        changes.append(f"imgsz → {imgsz}")
+
+        # workers: Windows conservative, Linux liberal
+        if sys.platform == "win32":
+            workers = min(4, max(0, batch // 4))
+        else:
+            workers = min(8, max(2, batch // 2))
+        self.workers_spin.setValue(workers)
+        changes.append(f"workers → {workers}")
+
+        # patience: scale with epochs
+        patience = min(epochs, max(20, epochs // 2))
+        self.patience_spin.setValue(patience)
+        changes.append(f"patience → {patience}")
+
+        # amp: disable on old Pascal / unknown NVIDIA (CC < 7.0)
+        is_legacy = False
+        if cc:
+            try:
+                is_legacy = float(cc) < 7.0
+            except ValueError:
+                pass
+        if is_legacy:
+            self.amp_check.setChecked(False)
+            changes.append("amp → 关闭 (GPU 架构不支持)")
+        else:
+            self.amp_check.setChecked(True)
+
+        # cache: enable for datasets > 200 images with enough RAM
+        if total > 200 and vram_gb >= 4:
+            self.cache_check.setChecked(True)
+            changes.append("cache → 开启")
+
+        # lr0: linear scaling with batch size (base 0.01 @ batch=16)
+        lr0 = round(0.01 * (batch / 16), 5)
+        lr0 = max(0.001, min(0.05, lr0))
+        self.lr0_spin.setValue(lr0)
+        changes.append(f"lr0 → {lr0}")
+
+        # warmup_epochs
+        if total < 100:
+            warmup = 5.0
+        elif total < 500:
+            warmup = 3.0
+        else:
+            warmup = 2.0
+        self.warmup_epochs_spin.setValue(warmup)
+        changes.append(f"warmup_epochs → {warmup}")
+
+        # close_mosaic
+        if total > 200:
+            close_mosaic = 10
+        elif total > 30:
+            close_mosaic = 5
+        else:
+            close_mosaic = 0
+        self.close_mosaic_spin.setValue(close_mosaic)
+        changes.append(f"close_mosaic → {close_mosaic}")
+
+        # mosaic
+        if total < 20:
+            self.mosaic_spin.setValue(0.0)
+            changes.append("mosaic → 关闭 (数据量太少)")
+        else:
+            self.mosaic_spin.setValue(1.0)
+
+        # mixup: only for larger datasets
+        if total >= 500:
+            self.mixup_spin.setValue(0.1)
+            changes.append("mixup → 0.1")
+        elif total >= 200:
+            self.mixup_spin.setValue(0.05)
+            changes.append("mixup → 0.05")
+        else:
+            self.mixup_spin.setValue(0.0)
+
+        # cos_lr: enable for small datasets
+        if total < 500:
+            self.cos_lr_check.setChecked(True)
+            changes.append("cos_lr → 开启 (小数据集)")
+        else:
+            self.cos_lr_check.setChecked(False)
+
+        # seed: keep current or randomize
+        if self.seed_spin.value() == 0:
+            import random
+            self.seed_spin.setValue(random.randint(1, 99999))
+            changes.append(f"seed → {self.seed_spin.value()}")
+
+        # ── Show summary ────────────────────────────────────────
+        gpu_info = f"{vram_gb:.0f}GB" + (f", CC={cc}" if cc else "") if vram_gb > 0 else "CPU"
+        summary = (
+            f"数据集: {total} 张图片 ({train_count} train / {val_count} val)\n"
+            f"类别数: {nc}\n"
+            f"模型: {model_name}\n"
+            f"GPU: {gpu_info}\n\n"
+            f"推荐参数调整 ({len(changes)} 项):\n"
+            + "\n".join(f"  ✓ {c}" for c in changes)
+        )
+
+        QMessageBox.information(self, "智能推荐完成", summary)
+        self.log_text.append(f"\n{'─'*50}\n[智能推荐] 分析 {total} 张图\n" + "\n".join(changes) + "\n")
 
     def get_training_args(self) -> dict:
         """Get training arguments from UI.
