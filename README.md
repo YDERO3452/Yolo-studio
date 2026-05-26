@@ -74,7 +74,7 @@ YOLO Studio 是一个基于 PyQt6 和 Ultralytics YOLO 框架开发的桌面端�
 
 ## 环境要求
 
-- **操作系统**：Windows 10/11
+- **操作系统**：Windows 10/11、Linux (Ubuntu 20.04+)
 - **Python 版本**：3.10 或更高版本
 - **GPU 支持**：CUDA 11.x+（可选，CPU 模式也可运行）
 - **内存建议**：8GB RAM 以上
