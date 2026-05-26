@@ -92,7 +92,7 @@ class YOLOTrainer:
             tc = self.config.training
             # Dump all fields; filter out None values (Ultralytics uses
             # None as "use default" and will error on explicit None).
-            dumped = tc.model_dump(exclude_none=False)
+            dumped = tc.model_dump(exclude_none=True)
             for key, value in dumped.items():
                 if value is not None:
                     args[key] = value

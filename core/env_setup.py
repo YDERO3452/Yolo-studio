@@ -972,7 +972,9 @@ def _get_windows_common_paths() -> list[str]:
 
 
 def _get_windows_drives() -> list[str]:
-    """Get available Windows drive letters."""
+    """Get available Windows drive letters. Returns empty list on non-Windows."""
+    if platform.system() != "Windows":
+        return []
     drives = []
     try:
         import string
@@ -987,7 +989,9 @@ def _get_windows_drives() -> list[str]:
 
 
 def _scan_cuda_toolkit_paths() -> list[str]:
-    """Scan for CUDA Toolkit installations across all drives."""
+    """Scan for CUDA Toolkit installations across all Windows drives."""
+    if platform.system() != "Windows":
+        return []
     paths = []
     drives = _get_windows_drives()
 

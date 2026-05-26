@@ -133,7 +133,7 @@ class ExportPanel(QWidget):
         # Status
         self.status_text = QTextEdit()
         self.status_text.setReadOnly(True)
-        self.status_text.setFont(QFont("Consolas", 9))
+        self.status_text.setFont(QFont("monospace", 9))
         layout.addWidget(self.status_text)
 
         # Format info

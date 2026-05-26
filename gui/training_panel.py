@@ -519,7 +519,7 @@ class TrainingPanel(QWidget):
 
         self.gpu_info_label = QLabel()
         self.gpu_info_label.setWordWrap(True)
-        self.gpu_info_label.setFont(QFont("Consolas", 9))
+        self.gpu_info_label.setFont(QFont("monospace", 9))
         self.gpu_info_label.setText(self._format_device_summary())
         device_layout.addRow("硬件摘要:", self.gpu_info_label)
 
@@ -728,7 +728,7 @@ class TrainingPanel(QWidget):
 
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setFont(QFont("Consolas", 9))
+        self.log_text.setFont(QFont("monospace", 9))
         self.chart_tabs.addTab(self.log_text, "训练日志")
 
         monitor_layout.addWidget(self.chart_tabs)

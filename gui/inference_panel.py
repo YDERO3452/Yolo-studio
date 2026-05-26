@@ -476,7 +476,7 @@ class InferencePanel(QWidget):
 
         self.results_text = QTextEdit()
         self.results_text.setReadOnly(True)
-        self.results_text.setFont(QFont("Consolas", 9))
+        self.results_text.setFont(QFont("monospace", 9))
         results_layout.addWidget(self.results_text)
 
         splitter.addWidget(results_widget)
@@ -547,7 +547,7 @@ class InferencePanel(QWidget):
         # Batch results
         self.batch_results_text = QTextEdit()
         self.batch_results_text.setReadOnly(True)
-        self.batch_results_text.setFont(QFont("Consolas", 9))
+        self.batch_results_text.setFont(QFont("monospace", 9))
         batch_layout.addWidget(self.batch_results_text)
 
         self.inference_tabs.addTab(batch_tab, "批量推理")

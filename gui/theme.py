@@ -35,7 +35,7 @@ def build_stylesheet() -> str:
     }}
     QWidget {{
         color: {Theme.TEXT};
-        font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+        font-family: "Microsoft YaHei UI", "Segoe UI", "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif;
         font-size: 13px;
     }}
     QLabel {{
@@ -338,7 +338,7 @@ def build_stylesheet() -> str:
         border-radius: 8px;
         padding: 6px;
         selection-background-color: {Theme.SELECTION};
-        font-family: "Cascadia Mono", "Consolas", monospace;
+        font-family: "Cascadia Mono", "Consolas", "DejaVu Sans Mono", "Noto Sans Mono", monospace;
     }}
     QListWidget, QTreeWidget, QTableWidget {{
         background: {Theme.SURFACE_2};

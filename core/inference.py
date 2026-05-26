@@ -194,13 +194,14 @@ class YOLOInference:
                     annotated = results[0].plot().copy()
                     callback(annotated, results[0])
                 else:
-                    annotated = results[0].plot().copy()
-                    cv2.imshow("YOLO Inference", annotated)
-                    if cv2.waitKey(1) & 0xFF == ord("q"):
-                        break
+                    logger.warning(
+                        "predict_webcam called without callback; "
+                        "skipping display to avoid blocking the PyQt event loop. "
+                        "Use a callback to receive frames, or call "
+                        "gui.inference_panel for a built-in webcam UI."
+                    )
         finally:
             cap.release()
-            cv2.destroyAllWindows()
             self.is_running = False
 
     def stop(self):

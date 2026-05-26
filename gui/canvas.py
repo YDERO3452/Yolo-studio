@@ -376,7 +376,9 @@ class AnnotationCanvas(QWidget):
         # Zoom indicator
         if self.zoom_level != 1.0:
             painter.setPen(QColor(200, 200, 200, 180))
-            painter.setFont(QFont("Arial", 10))
+            font = QFont()
+            font.setPointSize(10)
+            painter.setFont(font)
             painter.drawText(10, 20, f"{self.zoom_level:.1f}x")
 
         painter.end()
@@ -525,7 +527,8 @@ class AnnotationCanvas(QWidget):
         painter.setBrush(Qt.BrushStyle.NoBrush)
 
     def _draw_label(self, painter, label, x, y, color):
-        font = QFont("Arial", 10)
+        font = QFont()
+        font.setPointSize(10)
         painter.setFont(font)
         fm = painter.fontMetrics()
         tw = fm.horizontalAdvance(label)

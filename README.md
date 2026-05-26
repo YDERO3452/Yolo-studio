@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
 [![PyQt6](https://img.shields.io/badge/GUI-PyQt6-orange.svg)](https://www.riverbankcomputing.com/static/Docs/PyQt6/)
-[![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
+[![Platform](https://img.shields.io/badge/Platform-Windows_|_Linux-lightgrey.svg)](https://github.com)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.1+-red.svg)](https://pytorch.org/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.8+-purple.svg)](https://opencv.org/)
 [![Ultralytics](https://img.shields.io/badge/Ultralytics-8.2+-yellow.svg)](https://ultralytics.com/)

@@ -184,7 +184,7 @@ class DatasetPanel(QWidget):
 
         self.validation_text = QTextEdit()
         self.validation_text.setReadOnly(True)
-        self.validation_text.setFont(QFont("Consolas", 9))
+        self.validation_text.setFont(QFont("monospace", 9))
         self.validation_text.setMaximumHeight(150)
         valid_layout.addWidget(self.validation_text)
 

@@ -1384,7 +1384,9 @@ class MainWindow(QMainWindow):
     def _apply_theme(self) -> None:
         app = QApplication.instance()
         if app is not None:
-            app.setFont(QFont("Microsoft YaHei UI", 9))
+            font = QFont()
+            font.setPointSize(9)
+            app.setFont(font)
         self.setStyleSheet(build_stylesheet())
 
     def eventFilter(self, obj, event):
@@ -2129,7 +2131,11 @@ class MainWindow(QMainWindow):
                     width, height = self._read_image_size(image_path)
                     if width > 0 and height > 0:
                         shapes = load_yolo_shapes(image_path, width, height, self.class_manager) + shapes
-            width, height = self._image_size_for_save(image_path)
+            try:
+                width, height = self._image_size_for_save(image_path)
+            except ValueError:
+                logger.warning(f"跳过无法读取尺寸的图片: {image_path}")
+                continue
             save_yolo_shapes(image_path, shapes, width, height)
             if current_abs and image_abs == current_abs:
                 current_shapes = shapes

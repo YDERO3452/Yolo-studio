@@ -21,7 +21,8 @@ from PyQt6.QtWidgets import (
     QListWidgetItem, QTabWidget, QWidget, QFormLayout, QMessageBox,
     QSplitter,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer, QUrl
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtGui import QImage, QPixmap, QFont, QKeySequence, QShortcut
 from loguru import logger
 
@@ -831,7 +832,7 @@ class VideoCaptureDialog(QDialog):
     def _open_output_dir(self):
         output_dir = self._output_dir or self._get_output_dir()
         if os.path.isdir(output_dir):
-            os.startfile(output_dir)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(output_dir))
 
     # ------------------------------------------------------------------
     # Confirm and load
