@@ -548,7 +548,37 @@ class TrainingPanel(QWidget):
         self.exist_ok_check = QCheckBox("覆盖已有实验")
         save_layout.addRow(self.exist_ok_check)
 
+        self.plots_check = QCheckBox("生成训练图表 (关闭可跳过字体下载)")
+        self.plots_check.setChecked(False)  # default off to avoid font download hang
+        self.plots_check.setToolTip(
+            "启用后 ultralytics 会渲染训练曲线图片，\n"
+            "需要 Arial.Unicode.ttf 中文字体。\n"
+            "如无法下载字体，请在上方指定字体文件路径。"
+        )
+        save_layout.addRow(self.plots_check)
+
         save_group.setLayout(save_layout)
+
+        # Font (avoids ultralytics downloading Arial.Unicode.ttf from internet)
+        font_group = QGroupBox("字体 (避免训练卡死)")
+        font_layout = QFormLayout()
+        font_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+
+        self.font_path_edit = QLineEdit()
+        self.font_path_edit.setPlaceholderText("选择中文字体文件 (.ttf)，留空则跳过...")
+        self.font_path_edit.textChanged.connect(self._update_font_status)
+        font_browse = QPushButton("浏览...")
+        font_browse.clicked.connect(self.browse_font)
+        font_row = QHBoxLayout()
+        font_row.addWidget(self.font_path_edit)
+        font_row.addWidget(font_browse)
+        font_layout.addRow("字体文件:", font_row)
+
+        self.font_status_label = QLabel("")
+        self.font_status_label.setStyleSheet(f"color: {Theme.TEXT_MUTED}; font-size: 11px;")
+        font_layout.addRow(self.font_status_label)
+
+        font_group.setLayout(font_layout)
 
         # Training templates
         template_group = QGroupBox("训练模板")
@@ -691,6 +721,7 @@ class TrainingPanel(QWidget):
         setup_layout.addWidget(data_group)
         setup_layout.addWidget(device_group)
         setup_layout.addWidget(save_group)
+        setup_layout.addWidget(font_group)
         setup_layout.addWidget(template_group)
         setup_layout.addStretch()
         settings_tabs.addTab(setup_tab, "运行设置")
@@ -905,6 +936,58 @@ class TrainingPanel(QWidget):
         if path:
             self.project_edit.setText(path)
 
+    def browse_font(self):
+        """Browse for a font file (.ttf) to use for training plots."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "选择中文字体文件", "", "TrueType 字体 (*.ttf);;OpenType 字体 (*.otf);;所有文件 (*)"
+        )
+        if path:
+            self.font_path_edit.setText(path)
+            self._update_font_status()
+
+    def _update_font_status(self):
+        """Update the font status label."""
+        font_path = self.font_path_edit.text().strip()
+        if font_path and os.path.isfile(font_path):
+            self.font_status_label.setText(f"已选择: {os.path.basename(font_path)}")
+            self.font_status_label.setStyleSheet("color: #3fb950; font-size: 11px;")
+        elif font_path:
+            self.font_status_label.setText("字体文件不存在")
+            self.font_status_label.setStyleSheet("color: #f85149; font-size: 11px;")
+        else:
+            self.font_status_label.setText("未指定字体 — 将跳过字体注入")
+            self.font_status_label.setStyleSheet("color: #8b949e; font-size: 11px;")
+
+    @staticmethod
+    def _setup_font_for_training(font_path: str):
+        """Copy the user's font to ultralytics' expected location so it skips the download.
+
+        Ultralytics calls check_font() which looks in:
+        - Windows: %APPDATA%/Ultralytics/
+        - Linux/Mac: ~/.config/Ultralytics/
+        """
+        if not font_path or not os.path.isfile(font_path):
+            return False
+
+        import shutil
+        target_name = "Arial.Unicode.ttf"
+
+        if sys.platform == "win32":
+            target_dir = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "Ultralytics")
+        else:
+            target_dir = os.path.join(os.path.expanduser("~"), ".config", "Ultralytics")
+
+        os.makedirs(target_dir, exist_ok=True)
+        target_path = os.path.join(target_dir, target_name)
+
+        try:
+            shutil.copy2(font_path, target_path)
+            logger.info(f"Font injected: {font_path} -> {target_path}")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to inject font: {e}")
+            return False
+
     def get_training_args(self) -> dict:
         """Get training arguments from UI.
 
@@ -933,6 +1016,7 @@ class TrainingPanel(QWidget):
             "project": self.project_edit.text(),
             "name": self.name_edit.text(),
             "exist_ok": self.exist_ok_check.isChecked(),
+            "plots": self.plots_check.isChecked(),
         }
 
     def start_training(self):
@@ -946,6 +1030,14 @@ class TrainingPanel(QWidget):
         if not args["data_yaml"] or not os.path.exists(args["data_yaml"]):
             QMessageBox.warning(self, "错误", "请先选择有效的 data.yaml 文件")
             return
+
+        # Inject font to avoid ultralytics downloading Arial.Unicode.ttf from internet
+        font_path = self.font_path_edit.text().strip()
+        if font_path and args.get("plots"):
+            self._setup_font_for_training(font_path)
+            self.log_text.append(f"字体已注入: {font_path}")
+        elif args.get("plots") and not font_path:
+            self.log_text.append("⚠ 未指定字体文件，训练时可能尝试下载 Arial.Unicode.ttf")
 
         # Load model
         try:
@@ -1194,6 +1286,8 @@ class TrainingPanel(QWidget):
             "hsv_s": self.hsv_s_spin.value(),
             "degrees": self.degrees_spin.value(),
             "scale": self.scale_spin.value(),
+            "plots": self.plots_check.isChecked(),
+            "font_path": self.font_path_edit.text(),
         }
 
         template_data["_name"] = name
@@ -1275,6 +1369,11 @@ class TrainingPanel(QWidget):
             self.degrees_spin.setValue(float(template["degrees"]))
         if "scale" in template:
             self.scale_spin.setValue(float(template["scale"]))
+        if "plots" in template:
+            self.plots_check.setChecked(bool(template["plots"]))
+        if "font_path" in template:
+            self.font_path_edit.setText(str(template["font_path"]))
+            self._update_font_status()
 
         self.log_text.append(f"模板已加载: {name}")
 
