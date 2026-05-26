@@ -1173,26 +1173,28 @@ class TrainingPanel(QWidget):
         self.epochs_spin.setValue(epochs)
         changes.append(f"epochs → {epochs}")
 
-        # batch: based on GPU VRAM
+        # batch: based on GPU VRAM (leaves ~1GB headroom for framework overhead)
         if vram_gb >= 24:
             batch = 64
         elif vram_gb >= 12:
-            batch = 32
+            batch = 48
         elif vram_gb >= 8:
-            batch = 16
+            batch = 32
         elif vram_gb >= 6:
-            batch = 8
+            batch = 24
         elif vram_gb >= 4:
-            batch = 6
+            batch = 16
+        elif vram_gb >= 2:
+            batch = 8
         else:
             batch = 4
         self.batch_spin.setValue(batch)
         changes.append(f"batch → {batch}")
 
-        # imgsz: based on VRAM
-        if vram_gb >= 8:
+        # imgsz: 640 for 4GB+, otherwise scale down
+        if vram_gb >= 4:
             imgsz = 640
-        elif vram_gb >= 4:
+        elif vram_gb >= 2:
             imgsz = 480
         else:
             imgsz = 320
@@ -1201,9 +1203,9 @@ class TrainingPanel(QWidget):
 
         # workers: Windows conservative, Linux liberal
         if sys.platform == "win32":
-            workers = min(4, max(0, batch // 4))
+            workers = min(4, max(0, batch // 8))
         else:
-            workers = min(8, max(2, batch // 2))
+            workers = min(8, max(2, batch // 4))
         self.workers_spin.setValue(workers)
         changes.append(f"workers → {workers}")
 
