@@ -1190,7 +1190,7 @@ class TrainingPanel(QWidget):
         changes.append(f"epochs → {epochs}")
 
         # batch: based on GPU VRAM, scaled by model size factor
-        usable_vram = max(1, vram_gb - 0.5)  # minimal headroom
+        usable_vram = max(1, vram_gb - 1.0)  # reserve 1GB for framework overhead
         raw_batch = int(usable_vram * 5 * model_factor)  # 5 images/GB for nano@640
         if raw_batch >= 128:
             batch = 128
