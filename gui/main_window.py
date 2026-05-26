@@ -79,154 +79,11 @@ from gui.training_results_panel import TrainingResultsPanel
 from gui.ui_components import Card, SectionTitle, StatusPill
 from gui.workflow_optimization_panel import WorkflowOptimizationPanel
 from gui.llm_handler import LLMBatchInferenceWorker, LLMInferenceWorker, load_llm_config, save_llm_config
+from gui.yolo_label_worker import YOLOAutoLabelWorker
+from gui.file_list_widget import FileListWidget
+from gui.annotation_list_widget import AnnotationListWidget
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
-
-class YOLOAutoLabelWorker(QObject):
-    progress = pyqtSignal(int, int, str)
-    finished = pyqtSignal(dict)
-    error = pyqtSignal(str)
-
-    def __init__(
-        self,
-        model_manager: ModelManager,
-        image_paths: list[str],
-        conf: float,
-        iou: float,
-        max_det: int,
-    ):
-        super().__init__()
-        self.model_manager = model_manager
-        self.image_paths = image_paths
-        self.conf = conf
-        self.iou = iou
-        self.max_det = max_det
-
-    def run(self) -> None:
-        try:
-            results = {}
-            total = len(self.image_paths)
-            for index, image_path in enumerate(self.image_paths, start=1):
-                detections = self.model_manager.predict(
-                    image_path,
-                    conf=self.conf,
-                    iou=self.iou,
-                    max_det=self.max_det,
-                )
-                results[image_path] = detections or []
-                self.progress.emit(index, total, image_path)
-            self.finished.emit(results)
-        except Exception as exc:
-            logger.error(f"YOLO auto-label error: {exc}")
-            self.error.emit(str(exc))
-
-class FileListWidget(QListWidget):
-    file_selected = pyqtSignal(int)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.current_row = -1
-        self.setIconSize(QSize(10, 10))
-        self.itemClicked.connect(self._on_item_clicked)
-
-    def load_image_list(self, image_list: List[str]) -> None:
-        self.clear()
-        for index, path in enumerate(image_list):
-            item = QListWidgetItem(os.path.basename(path))
-            item.setToolTip(path)
-            item.setData(Qt.ItemDataRole.UserRole, index)
-            item.setIcon(self._status_icon(os.path.exists(label_path_for_image(path))))
-            self.addItem(item)
-
-    def highlight_current(self, index: int) -> None:
-        if 0 <= index < self.count():
-            self.setCurrentRow(index)
-            self.current_row = index
-
-    def _on_item_clicked(self, item: QListWidgetItem) -> None:
-        index = item.data(Qt.ItemDataRole.UserRole)
-        if index is not None:
-            self.file_selected.emit(index)
-
-    @staticmethod
-    def _status_icon(done: bool) -> QIcon:
-        pixmap = QPixmap(10, 10)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setBrush(QColor(Theme.SUCCESS if done else Theme.TEXT_DIM))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(1, 1, 8, 8)
-        painter.end()
-        return QIcon(pixmap)
-
-class AnnotationListWidget(QTreeWidget):
-    annotation_selected = pyqtSignal(int)
-    annotation_delete_requested = pyqtSignal(int)
-    annotation_edit_requested = pyqtSignal(int)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setHeaderLabels(["类别", "类型", "置信"])
-        self.header().setStretchLastSection(False)
-        self.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.header().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.header().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self.setRootIsDecorated(False)
-        self.setIndentation(0)
-        self.setSelectionBehavior(QTreeWidget.SelectionBehavior.SelectRows)
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.customContextMenuRequested.connect(self._show_context_menu)
-        self.currentItemChanged.connect(self._on_item_changed)
-        self.itemDoubleClicked.connect(self._on_item_double_clicked)
-
-    def refresh(self, shapes: list) -> None:
-        self.clear()
-        type_names = {
-            ShapeType.BBOX.value: "矩形",
-            ShapeType.POLYGON.value: "多边形",
-            ShapeType.OBB.value: "OBB",
-            ShapeType.KEYPOINT.value: "关键点",
-        }
-        for index, shape in enumerate(shapes):
-            class_name = shape.get("class_name", f"类别_{shape.get('class_id', 0)}")
-            stype = type_names.get(shape_type_value(shape.get("type", "")), str(shape.get("type", "")))
-            conf = shape.get("confidence", 0)
-            conf_text = f"{conf:.0%}" if conf else "-"
-            item = QTreeWidgetItem([class_name, stype, conf_text])
-            item.setData(0, Qt.ItemDataRole.UserRole, index)
-            self.addTopLevelItem(item)
-
-    def highlight_shape(self, index: int) -> None:
-        if 0 <= index < self.topLevelItemCount():
-            self.setCurrentItem(self.topLevelItem(index))
-
-    def _on_item_changed(self, current, previous) -> None:
-        if current:
-            index = current.data(0, Qt.ItemDataRole.UserRole)
-            if index is not None:
-                self.annotation_selected.emit(index)
-
-    def _on_item_double_clicked(self, item, column) -> None:
-        index = item.data(0, Qt.ItemDataRole.UserRole)
-        if index is not None:
-            self.annotation_edit_requested.emit(index)
-
-    def _show_context_menu(self, pos) -> None:
-        item = self.itemAt(pos)
-        if not item:
-            return
-        index = item.data(0, Qt.ItemDataRole.UserRole)
-        from PyQt6.QtWidgets import QMenu
-
-        menu = QMenu(self)
-        edit_action = menu.addAction("编辑标签")
-        delete_action = menu.addAction("删除")
-        action = menu.exec(self.mapToGlobal(pos))
-        if action == edit_action:
-            self.annotation_edit_requested.emit(index)
-        elif action == delete_action:
-            self.annotation_delete_requested.emit(index)
 
 class MainWindow(QMainWindow):
     """Main window with a workbench-oriented UI."""
@@ -268,7 +125,6 @@ class MainWindow(QMainWindow):
         self._apply_theme()
         self._show_launch_page()
         self._update_status()
-        self._update_workspace_summary()
 
         logger.info("MainWindow initialized")
 
@@ -1655,7 +1511,6 @@ class MainWindow(QMainWindow):
         self.file_list.highlight_current(self.current_image_index)
         self._set_dirty(False)
         self._update_status()
-        self._update_workspace_summary()
         # Update negative sample button state
         label_path = label_path_for_image(path)
         if os.path.isfile(label_path) and os.path.getsize(label_path) == 0:
@@ -1776,7 +1631,6 @@ class MainWindow(QMainWindow):
         self.canvas.set_classes(self.class_manager.get_all_classes())
         self.annot_list.refresh(self.canvas.get_shapes())
         self._set_dirty(True)
-        self._update_workspace_summary()
         self._autosave_annotations()
 
     def _assign_class_to_new_shape(self, shape: dict) -> bool:
@@ -1856,7 +1710,6 @@ class MainWindow(QMainWindow):
     def _on_shapes_changed(self) -> None:
         self.annot_list.refresh(self.canvas.get_shapes())
         self._set_dirty(True)
-        self._update_workspace_summary()
         self._autosave_annotations()
 
     def _on_annot_list_selected(self, index: int) -> None:
@@ -1894,7 +1747,6 @@ class MainWindow(QMainWindow):
             self.class_panel.refresh_list()
             self._refresh_class_quick_buttons()
             self._set_dirty(True)
-            self._update_workspace_summary()
             self._autosave_annotations()
 
     def _delete_or_edit_selected_label(self) -> None:
@@ -1921,7 +1773,6 @@ class MainWindow(QMainWindow):
             self.canvas.set_shapes(shapes)
             self.annot_list.refresh(shapes)
             self._set_dirty(True)
-            self._update_workspace_summary()
             self._autosave_annotations()
 
     def _clear_shapes(self) -> None:
@@ -1931,7 +1782,6 @@ class MainWindow(QMainWindow):
         self.canvas.clear_shapes()
         self.annot_list.refresh([])
         self._set_dirty(True)
-        self._update_workspace_summary()
         self._autosave_annotations()
 
     def _refresh_class_quick_buttons(self) -> None:
@@ -2148,8 +1998,7 @@ class MainWindow(QMainWindow):
             self.canvas.set_shapes(current_shapes)
             self.annot_list.refresh(current_shapes)
             self._set_dirty(False)
-            self._update_workspace_summary()
-        self.file_list.load_image_list(self.image_list)
+            self.file_list.load_image_list(self.image_list)
         self.file_list.highlight_current(self.current_image_index)
         self.yolo_progress_bar.setValue(100)
         self.yolo_status_label.setText(f"完成: {len(results)} 张图片 / {total_boxes} 个框")
@@ -2474,7 +2323,6 @@ class MainWindow(QMainWindow):
         self._refresh_class_quick_buttons()
         self.annot_list.refresh(shapes)
         self._set_dirty(True)
-        self._update_workspace_summary()
         self._autosave_annotations()
         self.file_list.load_image_list(self.image_list)
         self.file_list.highlight_current(self.current_image_index)
@@ -2844,9 +2692,6 @@ class MainWindow(QMainWindow):
             self.image_pill.setText("无图片")
             if hasattr(self, "queue_counter_label"):
                 self.queue_counter_label.setText("0 / 0")
-
-    def _update_workspace_summary(self) -> None:
-        pass
 
     # ------------------------------------------------------------------
     # Window events
