@@ -286,12 +286,79 @@ def _select_pytorch_cuda_build(env: "EnvInfo") -> Optional[dict[str, str]]:
     return None
 
 
+def _lookup_compute_capability(gpu_name: str) -> str:
+    """Infer compute capability from GPU model name when nvidia-smi is unavailable.
+
+    PyTorch wheel channels (cu128, cu130, …) drop kernel images for older GPU
+    architectures at compile time.  Without nvidia-smi we can't query the exact
+    compute capability, but model names follow well-known NVIDIA conventions
+    that let us pick a safe lower bound.
+    """
+    name = gpu_name.lower()
+
+    # Blackwell — RTX 5090 / 5080 / 5070 / 5060 …
+    if re.search(r'rtx\s*50\d', name):
+        return "10.0"
+
+    # Ada Lovelace — RTX 4090 / 4080 / 4070 / 4060 / 4050 …
+    if re.search(r'rtx\s*40\d', name):
+        return "8.9"
+
+    # Ampere — RTX 3090 / 3080 / 3070 / 3060 / 3050, A100, A6000, A5000, A4000 …
+    if re.search(r'rtx\s*30\d', name):
+        return "8.6"
+    if re.search(r'\ba(100|800|6000|5000|4000|10|40)\b', name):
+        return "8.0"
+
+    # Turing — RTX 2080 / 2070 / 2060, GTX 1660 / 1650, T4, T2000, T1000 …
+    if re.search(r'rtx\s*20\d', name):
+        return "7.5"
+    if re.search(r'gtx\s*16\d', name):
+        return "7.5"
+    if re.search(r'\bt4\b|\bt[12]\d{3}\b', name):
+        return "7.5"
+
+    # Volta — Titan V, Tesla V100 …
+    if re.search(r'\bv100\b|titan\s*v\b', name):
+        return "7.0"
+
+    # Pascal — GTX 1080 / 1070 / 1060 / 1050, GT 1030, Titan Xp, Tesla P100/P40/P4 …
+    if re.search(r'\bgt[x]?\s*10\d', name):
+        return "6.1"
+    if re.search(r'\btitan\s*xp?\b|\btesla\s*p', name):
+        return "6.1"
+
+    # Maxwell — GTX 980 / 970 / 960 / 950 / 750, Titan X
+    if re.search(r'gtx\s*[7-9]\d', name):
+        return "5.2"
+
+    # Kepler or older — GT(X/S) 6xx / 5xx / 4xx … (exclude GT 1030 which is Pascal)
+    if re.search(r'\bgt[xs]?\s*[1-6]\d', name) and not re.search(r'\bgt[x]?\s*10\d', name):
+        return "3.0"
+
+    return ""
+
+
 def _has_legacy_nvidia_arch(env: "EnvInfo") -> bool:
     """Return True for NVIDIA architectures that should stay on CUDA 12.x wheels.
 
-    Maxwell/Pascal/Volta class GPUs are better served by the legacy CUDA 12.6
-    PyTorch wheels even if a newer driver is installed.
+    Maxwell/Pascal/Volta class GPUs (compute capability < 7.5) are NOT supported
+    by PyTorch cu128/cu130 wheels — those wheels drop kernel images for old
+    architectures at compile time.  Installing them on a GTX 1080 / Titan V
+    leads to \"no kernel image is available\" at runtime.
+
+    When compute_capability is unknown for ALL NVIDIA GPUs (e.g. nvidia-smi not
+    in PATH), we err on the safe side: treat as legacy and cap at cu126.
     """
+    nvidia_gpus = [g for g in env.gpus if g.vendor == GPUVendor.NVIDIA]
+    known_count = sum(1 for g in nvidia_gpus if g.compute_capability)
+
+    # If we have NVIDIA GPUs but could not determine ANY compute capability,
+    # assume the worst — the driver is old or nvidia-smi is missing, so the
+    # GPU is likely an older model.  Cap at cu126 to be safe.
+    if nvidia_gpus and known_count == 0:
+        return True
+
     for gpu in env.gpus:
         if gpu.vendor != GPUVendor.NVIDIA or not gpu.compute_capability:
             continue
@@ -1146,6 +1213,7 @@ def _add_gpu_from_wmi(env: EnvInfo, name: str, driver_version: str, adapter_ram:
         vendor=vendor,
         driver_version=driver_version,
         vram_mb=vram_mb,
+        compute_capability=_lookup_compute_capability(name) if vendor == GPUVendor.NVIDIA else "",
     )
     env.gpus.append(gpu)
 
@@ -1201,7 +1269,10 @@ def _detect_linux_nvidia(env: EnvInfo):
                     if line.startswith("Model:"):
                         model = line.split(":", 1)[1].strip().strip("\t")
                 if model:
-                    gpu = GPUDevice(name=model, vendor=GPUVendor.NVIDIA)
+                    gpu = GPUDevice(
+                        name=model, vendor=GPUVendor.NVIDIA,
+                        compute_capability=_lookup_compute_capability(model),
+                    )
                     env.gpus.append(gpu)
                     env.has_nvidia_gpu = True
             except Exception:
