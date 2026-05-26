@@ -548,15 +548,6 @@ class TrainingPanel(QWidget):
         self.exist_ok_check = QCheckBox("覆盖已有实验")
         save_layout.addRow(self.exist_ok_check)
 
-        self.plots_check = QCheckBox("生成训练图表 (关闭可跳过字体下载)")
-        self.plots_check.setChecked(False)  # default off to avoid font download hang
-        self.plots_check.setToolTip(
-            "启用后 ultralytics 会渲染训练曲线图片，\n"
-            "需要 Arial.Unicode.ttf 中文字体。\n"
-            "如无法下载字体，请在上方指定字体文件路径。"
-        )
-        save_layout.addRow(self.plots_check)
-
         save_group.setLayout(save_layout)
 
         # Font (avoids ultralytics downloading Arial.Unicode.ttf from internet)
@@ -642,6 +633,22 @@ class TrainingPanel(QWidget):
         self.patience_spin.setValue(self.config.get("training", "patience", 100))
         params_layout.addRow("早停轮数 (patience):", self.patience_spin)
 
+        self.amp_check = QCheckBox("启用混合精度训练 (推荐开启)")
+        self.amp_check.setChecked(self.config.get("training", "amp", True))
+        self.amp_check.setToolTip("AMP 可大幅降低显存占用，低显存显卡建议开启")
+        params_layout.addRow(self.amp_check)
+
+        self.cache_check = QCheckBox("缓存图片到内存 (加速训练)")
+        self.cache_check.setChecked(self.config.get("training", "cache", False))
+        self.cache_check.setToolTip("第一轮后图片直接从内存读取，加速明显但会占用更多内存")
+        params_layout.addRow(self.cache_check)
+
+        self.seed_spin = QSpinBox()
+        self.seed_spin.setRange(0, 99999)
+        self.seed_spin.setValue(self.config.get("training", "seed", 0))
+        self.seed_spin.setToolTip("随机种子，0=随机")
+        params_layout.addRow("随机种子 (seed):", self.seed_spin)
+
         params_group.setLayout(params_layout)
 
         # Optimizer
@@ -670,6 +677,35 @@ class TrainingPanel(QWidget):
         self.weight_decay_spin.setDecimals(5)
         self.weight_decay_spin.setValue(self.config.get("training", "weight_decay", 0.0005))
         optim_layout.addRow("权重衰减:", self.weight_decay_spin)
+
+        self.lrf_spin = QDoubleSpinBox()
+        self.lrf_spin.setRange(0.001, 1.0)
+        self.lrf_spin.setDecimals(3)
+        self.lrf_spin.setValue(self.config.get("training", "lrf", 0.01))
+        self.lrf_spin.setToolTip("最终学习率 = lr0 × lrf")
+        optim_layout.addRow("最终学习率因子 (lrf):", self.lrf_spin)
+
+        self.warmup_epochs_spin = QDoubleSpinBox()
+        self.warmup_epochs_spin.setRange(0.0, 50.0)
+        self.warmup_epochs_spin.setDecimals(1)
+        self.warmup_epochs_spin.setValue(self.config.get("training", "warmup_epochs", 3.0))
+        optim_layout.addRow("预热轮数:", self.warmup_epochs_spin)
+
+        self.warmup_momentum_spin = QDoubleSpinBox()
+        self.warmup_momentum_spin.setRange(0.0, 1.0)
+        self.warmup_momentum_spin.setDecimals(3)
+        self.warmup_momentum_spin.setValue(self.config.get("training", "warmup_momentum", 0.8))
+        optim_layout.addRow("预热动量:", self.warmup_momentum_spin)
+
+        self.cos_lr_check = QCheckBox("余弦学习率调度 (cos_lr)")
+        self.cos_lr_check.setChecked(self.config.get("training", "cos_lr", False))
+        optim_layout.addRow(self.cos_lr_check)
+
+        self.close_mosaic_spin = QSpinBox()
+        self.close_mosaic_spin.setRange(0, 100)
+        self.close_mosaic_spin.setValue(self.config.get("training", "close_mosaic", 10))
+        self.close_mosaic_spin.setToolTip("最后 N 轮关闭马赛克增强，有助于最终收敛")
+        optim_layout.addRow("关闭马赛克轮数:", self.close_mosaic_spin)
 
         optim_group.setLayout(optim_layout)
 
@@ -713,6 +749,44 @@ class TrainingPanel(QWidget):
         self.scale_spin.setDecimals(2)
         self.scale_spin.setValue(0.5)
         aug_layout.addRow("缩放:", self.scale_spin)
+
+        self.hsv_v_spin = QDoubleSpinBox()
+        self.hsv_v_spin.setRange(0.0, 1.0)
+        self.hsv_v_spin.setDecimals(2)
+        self.hsv_v_spin.setValue(0.4)
+        aug_layout.addRow("HSV-明度:", self.hsv_v_spin)
+
+        self.translate_spin = QDoubleSpinBox()
+        self.translate_spin.setRange(0.0, 1.0)
+        self.translate_spin.setDecimals(2)
+        self.translate_spin.setValue(0.1)
+        aug_layout.addRow("平移:", self.translate_spin)
+
+        self.shear_spin = QDoubleSpinBox()
+        self.shear_spin.setRange(0.0, 30.0)
+        self.shear_spin.setDecimals(1)
+        self.shear_spin.setValue(0.0)
+        aug_layout.addRow("剪切:", self.shear_spin)
+
+        self.flipud_spin = QDoubleSpinBox()
+        self.flipud_spin.setRange(0.0, 1.0)
+        self.flipud_spin.setDecimals(2)
+        self.flipud_spin.setValue(0.0)
+        aug_layout.addRow("垂直翻转:", self.flipud_spin)
+
+        self.mixup_spin = QDoubleSpinBox()
+        self.mixup_spin.setRange(0.0, 1.0)
+        self.mixup_spin.setDecimals(2)
+        self.mixup_spin.setValue(0.0)
+        self.mixup_spin.setToolTip("MixUp 数据增强概率")
+        aug_layout.addRow("MixUp:", self.mixup_spin)
+
+        self.erasing_spin = QDoubleSpinBox()
+        self.erasing_spin.setRange(0.0, 1.0)
+        self.erasing_spin.setDecimals(2)
+        self.erasing_spin.setValue(0.4)
+        self.erasing_spin.setToolTip("随机擦除增强概率")
+        aug_layout.addRow("随机擦除:", self.erasing_spin)
 
         aug_group.setLayout(aug_layout)
 
@@ -1003,20 +1077,33 @@ class TrainingPanel(QWidget):
             "device": self.device_combo.currentData() or self.device_combo.currentText(),
             "workers": self.workers_spin.value(),
             "patience": self.patience_spin.value(),
+            "amp": self.amp_check.isChecked(),
+            "cache": self.cache_check.isChecked(),
+            "seed": self.seed_spin.value(),
             "optimizer": self.optimizer_combo.currentText(),
             "lr0": self.lr0_spin.value(),
+            "lrf": self.lrf_spin.value(),
             "momentum": self.momentum_spin.value(),
             "weight_decay": self.weight_decay_spin.value(),
+            "warmup_epochs": self.warmup_epochs_spin.value(),
+            "warmup_momentum": self.warmup_momentum_spin.value(),
+            "cos_lr": self.cos_lr_check.isChecked(),
+            "close_mosaic": self.close_mosaic_spin.value(),
             "fliplr": self.fliplr_spin.value(),
             "mosaic": self.mosaic_spin.value(),
             "hsv_h": self.hsv_h_spin.value(),
             "hsv_s": self.hsv_s_spin.value(),
+            "hsv_v": self.hsv_v_spin.value(),
             "degrees": self.degrees_spin.value(),
             "scale": self.scale_spin.value(),
+            "translate": self.translate_spin.value(),
+            "shear": self.shear_spin.value(),
+            "flipud": self.flipud_spin.value(),
+            "mixup": self.mixup_spin.value(),
+            "erasing": self.erasing_spin.value(),
             "project": self.project_edit.text(),
             "name": self.name_edit.text(),
             "exist_ok": self.exist_ok_check.isChecked(),
-            "plots": self.plots_check.isChecked(),
         }
 
     def start_training(self):
@@ -1033,11 +1120,9 @@ class TrainingPanel(QWidget):
 
         # Inject font to avoid ultralytics downloading Arial.Unicode.ttf from internet
         font_path = self.font_path_edit.text().strip()
-        if font_path and args.get("plots"):
+        if font_path:
             self._setup_font_for_training(font_path)
             self.log_text.append(f"字体已注入: {font_path}")
-        elif args.get("plots") and not font_path:
-            self.log_text.append("⚠ 未指定字体文件，训练时可能尝试下载 Arial.Unicode.ttf")
 
         # Load model
         try:
@@ -1276,17 +1361,30 @@ class TrainingPanel(QWidget):
             "imgsz": self.imgsz_spin.value(),
             "workers": self.workers_spin.value(),
             "patience": self.patience_spin.value(),
+            "amp": self.amp_check.isChecked(),
+            "cache": self.cache_check.isChecked(),
+            "seed": self.seed_spin.value(),
             "optimizer": self.optimizer_combo.currentIndex(),
             "lr0": self.lr0_spin.value(),
+            "lrf": self.lrf_spin.value(),
             "momentum": self.momentum_spin.value(),
             "weight_decay": self.weight_decay_spin.value(),
+            "warmup_epochs": self.warmup_epochs_spin.value(),
+            "warmup_momentum": self.warmup_momentum_spin.value(),
+            "cos_lr": self.cos_lr_check.isChecked(),
+            "close_mosaic": self.close_mosaic_spin.value(),
             "fliplr": self.fliplr_spin.value(),
             "mosaic": self.mosaic_spin.value(),
             "hsv_h": self.hsv_h_spin.value(),
             "hsv_s": self.hsv_s_spin.value(),
+            "hsv_v": self.hsv_v_spin.value(),
             "degrees": self.degrees_spin.value(),
             "scale": self.scale_spin.value(),
-            "plots": self.plots_check.isChecked(),
+            "translate": self.translate_spin.value(),
+            "shear": self.shear_spin.value(),
+            "flipud": self.flipud_spin.value(),
+            "mixup": self.mixup_spin.value(),
+            "erasing": self.erasing_spin.value(),
             "font_path": self.font_path_edit.text(),
         }
 
@@ -1347,16 +1445,32 @@ class TrainingPanel(QWidget):
             self.workers_spin.setValue(int(template["workers"]))
         if "patience" in template:
             self.patience_spin.setValue(int(template["patience"]))
+        if "amp" in template:
+            self.amp_check.setChecked(bool(template["amp"]))
+        if "cache" in template:
+            self.cache_check.setChecked(bool(template["cache"]))
+        if "seed" in template:
+            self.seed_spin.setValue(int(template["seed"]))
         if "optimizer" in template:
             oidx = int(template["optimizer"])
             if 0 <= oidx < self.optimizer_combo.count():
                 self.optimizer_combo.setCurrentIndex(oidx)
         if "lr0" in template:
             self.lr0_spin.setValue(float(template["lr0"]))
+        if "lrf" in template:
+            self.lrf_spin.setValue(float(template["lrf"]))
         if "momentum" in template:
             self.momentum_spin.setValue(float(template["momentum"]))
         if "weight_decay" in template:
             self.weight_decay_spin.setValue(float(template["weight_decay"]))
+        if "warmup_epochs" in template:
+            self.warmup_epochs_spin.setValue(float(template["warmup_epochs"]))
+        if "warmup_momentum" in template:
+            self.warmup_momentum_spin.setValue(float(template["warmup_momentum"]))
+        if "cos_lr" in template:
+            self.cos_lr_check.setChecked(bool(template["cos_lr"]))
+        if "close_mosaic" in template:
+            self.close_mosaic_spin.setValue(int(template["close_mosaic"]))
         if "fliplr" in template:
             self.fliplr_spin.setValue(float(template["fliplr"]))
         if "mosaic" in template:
@@ -1365,12 +1479,22 @@ class TrainingPanel(QWidget):
             self.hsv_h_spin.setValue(float(template["hsv_h"]))
         if "hsv_s" in template:
             self.hsv_s_spin.setValue(float(template["hsv_s"]))
+        if "hsv_v" in template:
+            self.hsv_v_spin.setValue(float(template["hsv_v"]))
         if "degrees" in template:
             self.degrees_spin.setValue(float(template["degrees"]))
         if "scale" in template:
             self.scale_spin.setValue(float(template["scale"]))
-        if "plots" in template:
-            self.plots_check.setChecked(bool(template["plots"]))
+        if "translate" in template:
+            self.translate_spin.setValue(float(template["translate"]))
+        if "shear" in template:
+            self.shear_spin.setValue(float(template["shear"]))
+        if "flipud" in template:
+            self.flipud_spin.setValue(float(template["flipud"]))
+        if "mixup" in template:
+            self.mixup_spin.setValue(float(template["mixup"]))
+        if "erasing" in template:
+            self.erasing_spin.setValue(float(template["erasing"]))
         if "font_path" in template:
             self.font_path_edit.setText(str(template["font_path"]))
             self._update_font_status()
