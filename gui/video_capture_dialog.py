@@ -855,4 +855,10 @@ class VideoCaptureDialog(QDialog):
     def closeEvent(self, event):
         self._stop_playback()
         self.extractor.close()
+        # Stop background workers to prevent crashes
+        for worker in ("_download_worker", "_extract_worker"):
+            w = getattr(self, worker, None)
+            if w is not None and w.isRunning():
+                w.quit() if hasattr(w, "quit") else w.terminate()
+                w.wait(3000)
         super().closeEvent(event)

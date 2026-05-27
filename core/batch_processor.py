@@ -90,10 +90,10 @@ class BatchProcessor:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Get list of images
-        image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff"}
+        image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
         input_dir = Path(config.input_dir)
         image_files = [
-            f for f in input_dir.iterdir()
+            f for f in input_dir.rglob("*")
             if f.is_file() and f.suffix.lower() in image_extensions
         ]
 
@@ -233,8 +233,10 @@ class BatchProcessor:
         output_file: Path,
     ) -> None:
         """Save detections in COCO format."""
+        import hashlib
+        image_id = int(hashlib.md5(image_path.name.encode()).hexdigest(), 16) % (10 ** 8)
         coco_data = {
-            "image_id": hash(image_path.name) % (10 ** 8),
+            "image_id": image_id,
             "annotations": []
         }
 

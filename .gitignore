@@ -24,3 +24,9 @@ htmlcov/
 Thumbs.db
 
 *.pt
+
+# Build artifacts
+build/
+dist/
+*.spec.bak
+*.zip

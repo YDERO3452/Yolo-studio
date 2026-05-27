@@ -1,9 +1,10 @@
 """Model management module — handles YOLO model loading and inference."""
 
-import os
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from loguru import logger
+
+from core.geometry_utils import obb_xywhr_to_corners
 
 try:
     from ultralytics import YOLO
@@ -91,19 +92,7 @@ class ModelManager:
             return False
 
         try:
-            # Check if model is already loaded (cache hit)
-            cache_key = f"{model_name}@{device}"
-            if cache_key in self.loaded_models:
-                self.current_model = self.loaded_models[cache_key]
-                self.current_model_name = model_name
-                logger.info(f"Using cached model: {cache_key}")
-                return True
-
-            # Load model (factory pattern)
-            logger.info(f"Loading model: {model_name}")
-            model = YOLO(model_name)
-
-            # Auto-detect device if not specified
+            # Auto-detect device if not specified (MUST be done before cache lookup)
             if not device:
                 try:
                     import torch
@@ -111,9 +100,20 @@ class ModelManager:
                 except ImportError:
                     device = "cpu"
 
+            # Check if model is already loaded (cache hit)
+            cache_key = f"{model_name}@{device}"
+            if cache_key in self.loaded_models:
+                self.current_model = self.loaded_models[cache_key]
+                self.current_model_name = model_name
+                self._device = device
+                logger.info(f"Using cached model: {cache_key}")
+                return True
+
+            # Load model (factory pattern)
+            logger.info(f"Loading model: {model_name}")
+            model = YOLO(model_name)
+
             # Store device for use in predict() calls.
-            # NOTE: Ultralytics YOLO does NOT honor model.to(device).
-            # The device must be passed explicitly via predict(device=...).
             self._device = device
             logger.info(f"Model will use device: {self._device}")
 
@@ -138,11 +138,13 @@ class ModelManager:
         if model_name is None:
             model_name = self.current_model_name
 
-        if model_name in self.loaded_models:
-            del self.loaded_models[model_name]
-            if self.current_model_name == model_name:
-                self.current_model = None
-                self.current_model_name = None
+        keys_to_remove = [k for k in self.loaded_models if k.startswith(f"{model_name}@")]
+        for key in keys_to_remove:
+            del self.loaded_models[key]
+        if model_name == self.current_model_name:
+            self.current_model = None
+            self.current_model_name = None
+        if keys_to_remove:
             logger.info(f"Model unloaded: {model_name}")
 
     def predict(
@@ -201,16 +203,8 @@ class ModelManager:
                         }
                         # Convert xywhr to 4 corner points
                         if obb.xywhr is not None and len(obb.xywhr[i]) >= 5:
-                            import math
                             cx, cy, w, h, r = obb.xywhr[i].cpu().numpy().tolist()[:5]
-                            cos_a = math.cos(r)
-                            sin_a = math.sin(r)
-                            corners = []
-                            for dx, dy in [(-w/2, -h/2), (w/2, -h/2), (w/2, h/2), (-w/2, h/2)]:
-                                px = cx + dx * cos_a - dy * sin_a
-                                py = cy + dx * sin_a + dy * cos_a
-                                corners.append((px, py))
-                            det["corners"] = corners
+                            det["corners"] = obb_xywhr_to_corners(cx, cy, w, h, r)
                         detections.append(det)
                     continue
 

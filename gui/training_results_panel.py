@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import os
 import shutil
 from pathlib import Path
 
@@ -121,9 +120,7 @@ class TrainingResultsPanel(QWidget):
         for root in roots:
             if not root.exists():
                 continue
-            for path in root.rglob("*"):
-                if not path.is_dir():
-                    continue
+            for path in root.glob("*/"):
                 if (path / "results.csv").exists() or (path / "weights" / "best.pt").exists():
                     found.add(path.resolve())
         return sorted(found, key=lambda p: p.stat().st_mtime, reverse=True)
@@ -238,4 +235,5 @@ class TrainingResultsPanel(QWidget):
                 if key in last and str(last.get(key, "")).strip()
             }
         except Exception:
+            # harmless: corrupt last-run data, return empty
             return {}

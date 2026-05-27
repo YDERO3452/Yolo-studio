@@ -10,7 +10,6 @@ Architecture overview:
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 from loguru import logger
-from pathlib import Path
 
 from core.model_manager import ModelManager
 
@@ -264,6 +263,8 @@ class AutoLabelingEngine:
         Returns:
             IOU value between 0 and 1
         """
+        if len(bbox1) < 4 or len(bbox2) < 4:
+            return 0.0
         x1_min, y1_min, x1_max, y1_max = bbox1[:4]
         x2_min, y2_min, x2_max, y2_max = bbox2[:4]
 

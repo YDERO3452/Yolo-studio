@@ -1,10 +1,10 @@
 """Configuration management module."""
 
 import os
-from pathlib import Path
 from typing import Any, Optional
 
 import yaml
+from loguru import logger
 from pydantic import BaseModel, Field
 
 
@@ -145,9 +145,6 @@ class AppGeneralConfig(BaseModel):
     theme: str = "dark"
     language: str = "zh"
 
-    # Backward-compat aliases so old code using .conf_threshold still works
-    # (removed after migration — see bottom of file for compat helpers)
-
 
 class AppConfig(BaseModel):
     app: AppGeneralConfig = Field(default_factory=AppGeneralConfig)
@@ -161,7 +158,8 @@ class ConfigManager:
     """Manages application configuration."""
 
     def __init__(self, config_path: Optional[str] = None):
-        self.config_path = config_path or "configs/default.yaml"
+        from freeze import get_resource_path
+        self.config_path = config_path or str(get_resource_path("configs/default.yaml"))
         self.config = AppConfig()
         if os.path.exists(self.config_path):
             self.load()
@@ -169,8 +167,12 @@ class ConfigManager:
     def load(self, path: Optional[str] = None):
         """Load configuration from YAML file."""
         path = path or self.config_path
-        with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+        except FileNotFoundError:
+            logger.warning(f"Config file not found: {path}, using defaults")
+            return
         if data:
             if "app" in data:
                 self.config.app = AppGeneralConfig(**data["app"])

@@ -64,6 +64,7 @@ class ProjectManager:
                     projects.append(project)
                     known_roots.add(root)
             except Exception:
+                # harmless: malformed project entry, skip
                 continue
 
         projects = [p for p in projects if p.get("root") and Path(p["root"]).exists()]
@@ -511,7 +512,12 @@ class ProjectManager:
                 data = yaml.safe_load(data_yaml.read_text(encoding="utf-8")) or {}
                 names = data.get("names")
                 if isinstance(names, dict):
-                    return [str(names[key]).strip() for key in sorted(names, key=lambda item: int(item)) if str(names[key]).strip()]
+                    def _sort_key(item):
+                        try:
+                            return (0, int(item))
+                        except (ValueError, TypeError):
+                            return (1, item)
+                    return [str(names[key]).strip() for key in sorted(names, key=_sort_key) if str(names[key]).strip()]
                 if isinstance(names, list):
                     return [str(name).strip() for name in names if str(name).strip()]
             except Exception as exc:
@@ -581,6 +587,7 @@ class ProjectManager:
                 h, w = image.shape[:2]
                 return int(w), int(h)
         except Exception:
+            # harmless: image unreadable or corrupt, return zero size
             pass
         return 0, 0
 

@@ -1,7 +1,5 @@
 """Model export module."""
 
-import os
-from pathlib import Path
 from typing import Optional
 
 from loguru import logger

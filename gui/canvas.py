@@ -148,12 +148,17 @@ class AnnotationCanvas(QWidget):
         self.current_class_id = class_id
 
     def load_image(self, image_path: str) -> bool:
+        # Release previous image buffers before loading new one
+        self._resized_buf = None
+        self._display_bytes = None
+
         # Use numpy to read file (handles non-ASCII paths like Chinese characters)
         try:
             with open(image_path, "rb") as f:
                 data = np.frombuffer(f.read(), dtype=np.uint8)
             self.original_image = cv2.imdecode(data, cv2.IMREAD_COLOR)
         except Exception:
+            # harmless: numpy fallback for paths with non-ASCII characters
             self.original_image = cv2.imread(image_path)
 
         if self.original_image is None:
@@ -326,6 +331,10 @@ class AnnotationCanvas(QWidget):
         painter.fillRect(self.rect(), QColor(32, 34, 34))
 
         if not self.display_pixmap:
+            painter.setPen(QColor(120, 120, 120))
+            painter.setFont(QFont("Microsoft YaHei", 14))
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter,
+                             "Ctrl+O 打开图片目录开始标注")
             painter.end()
             return
 
@@ -602,8 +611,12 @@ class AnnotationCanvas(QWidget):
 
         elif event.button() == Qt.MouseButton.RightButton:
             if self.drawing_polygon:
-                # Close polygon
-                self._finish_polygon()
+                if len(self.polygon_points) >= 4:
+                    self._finish_polygon()
+                else:
+                    self.drawing_polygon = False
+                    self.polygon_points.clear()
+                    self.update()
                 return
             # Delete shape on right click in edit mode
             clicked = self._get_shape_at(pos)
@@ -712,7 +725,10 @@ class AnnotationCanvas(QWidget):
                     self.update()
 
             if self.moving:
+                self.push_undo()
                 self.moving = False
+            if self.resize_handle is not None or self.resize_vertex >= 0:
+                self.push_undo()
             self.resize_handle = None
             self.resize_vertex = -1
 
@@ -791,7 +807,7 @@ class AnnotationCanvas(QWidget):
             return
 
         if key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
-            if self.drawing_polygon and len(self.polygon_points) >= 3:
+            if self.drawing_polygon and len(self.polygon_points) >= 4:
                 self._finish_polygon()
             return
 

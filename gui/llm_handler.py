@@ -10,7 +10,12 @@ import base64
 from loguru import logger
 from PyQt6.QtCore import QThread, pyqtSignal
 
-LLM_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "llm_config.json"
+from freeze import get_writable_dir, get_resource_path
+
+# Writable config path (user's saved settings)
+LLM_CONFIG_PATH = get_writable_dir() / "config" / "llm_config.json"
+# Bundled config path (defaults shipped with the app)
+LLM_CONFIG_BUNDLE_PATH = get_resource_path("config/llm_config.json")
 
 OLD_SYSTEM_PROMPT = "You are a precise object detection assistant. Output ONLY bounding boxes in the format: label,[xmin,ymin,xmax,ymax] with one box per line. Each coordinate value is a number between 0 and 1 (relative coordinates). Do NOT include any other text, explanation, or markdown formatting."
 OLD_USER_PROMPT = "Detect all '{target}' objects in this image. Output only bounding boxes in the format: label,[xmin,ymin,xmax,ymax] per line."
@@ -39,6 +44,7 @@ DEFAULT_LLM_CONFIG = {
 
 def load_llm_config() -> dict:
     config = dict(DEFAULT_LLM_CONFIG)
+    # Try writable location first (user's saved config)
     if LLM_CONFIG_PATH.exists():
         try:
             saved = json.loads(LLM_CONFIG_PATH.read_text(encoding="utf-8"))
@@ -46,6 +52,15 @@ def load_llm_config() -> dict:
                 config.update(saved)
         except Exception as exc:
             logger.warning(f"Failed to load LLM config: {exc}")
+    # Fall back to bundled config (shipped with app)
+    elif LLM_CONFIG_BUNDLE_PATH.exists():
+        try:
+            saved = json.loads(LLM_CONFIG_BUNDLE_PATH.read_text(encoding="utf-8"))
+            if isinstance(saved, dict):
+                config.update(saved)
+        except Exception:
+            # harmless: config file missing or malformed, use defaults
+            pass
     if config.get("system_prompt") in ("", OLD_SYSTEM_PROMPT):
         config["system_prompt"] = EZYOLO_SYSTEM_PROMPT
     if config.get("user_prompt") in ("", OLD_USER_PROMPT):
@@ -170,6 +185,7 @@ class LLMInferenceWorker(QThread):
         try:
             return template.format(target=target_class)
         except Exception:
+            # harmless: str.format may fail on malformed template, fallback to replace
             return template.replace("{target}", target_class)
 
     @classmethod
@@ -262,8 +278,8 @@ class LLMInferenceWorker(QThread):
                         detections.append(det)
                 if detections:
                     return detections
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"JSON detection parsing failed, falling back to regex: {e}")
 
         pattern = r'([^,\[\]\n]+?)\s*,\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]'
         for match in re.finditer(pattern, content):

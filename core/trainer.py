@@ -1,6 +1,5 @@
 """YOLO training module."""
 
-import os
 import time
 from pathlib import Path
 from typing import Optional, Callable
@@ -92,10 +91,7 @@ class YOLOTrainer:
             tc = self.config.training
             # Dump all fields; filter out None values (Ultralytics uses
             # None as "use default" and will error on explicit None).
-            dumped = tc.model_dump(exclude_none=True)
-            for key, value in dumped.items():
-                if value is not None:
-                    args[key] = value
+            args.update(tc.model_dump(exclude_none=True))
 
         # Override with kwargs
         args.update(kwargs)

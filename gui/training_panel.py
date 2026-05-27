@@ -3,13 +3,14 @@
 import os
 import sys
 import io
+import re
+import shutil
 import threading
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QComboBox, QSpinBox, QDoubleSpinBox, QPushButton, QLineEdit,
     QTextEdit, QProgressBar, QFileDialog, QCheckBox, QScrollArea,
-    QFormLayout, QTabWidget, QMessageBox, QSplitter, QDialog,
-    QDialogButtonBox, QInputDialog
+    QFormLayout, QTabWidget, QMessageBox, QSplitter, QDialog, QInputDialog
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer
 from PyQt6.QtGui import QFont
@@ -17,7 +18,7 @@ from loguru import logger
 
 from core.config import ConfigManager
 from core.trainer import YOLOTrainer
-from core.gpu import detect_cuda, format_gpu_summary
+from core.gpu import detect_cuda
 from gui.theme import Theme
 from gui.ui_components import StatusPill
 
@@ -128,7 +129,7 @@ class _StreamTee:
             try:
                 setattr(self, attr, getattr(original, attr, None))
             except Exception:
-                pass
+                pass  # harmless: attribute may not exist on original stream
 
     # ---- Stream interface ----
     def write(self, s):
@@ -143,10 +144,13 @@ class _StreamTee:
         return len(s)
 
     def flush(self):
-        self._original.flush()
+        if self._original is not None:
+            self._original.flush()
 
     def writable(self):
-        return True
+        if self._original is None:
+            return True
+        return self._original.writable() if hasattr(self._original, "writable") else True
 
     def readable(self):
         return False
@@ -158,7 +162,10 @@ class _StreamTee:
         return False
 
     def fileno(self):
-        return self._original.fileno()
+        try:
+            return self._original.fileno()
+        except (AttributeError, OSError):
+            raise OSError("_StreamTee has no real file descriptor")
 
     @property
     def closed(self):
@@ -212,8 +219,8 @@ class TrainingWorker(QThread):
                         metrics["train/box_loss"] = float(tloss[0])
                         metrics["train/cls_loss"] = float(tloss[1])
                         metrics["train/dfl_loss"] = float(tloss[2])
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Failed to extract training losses: {e}")
 
             # --- Validation metrics & losses ---
             # trainer_obj.metrics is a dict set by trainer.validate(), e.g.:
@@ -1045,10 +1052,169 @@ class TrainingPanel(QWidget):
             self.font_path_edit.setText(path)
             self._update_font_status()
 
+    @staticmethod
+    def _count_images(dir_path: str) -> int:
+        """Count image files in a directory (recursive)."""
+        if not dir_path or not os.path.isdir(dir_path):
+            return 0
+        exts = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+        count = 0
+        for root, _dirs, files in os.walk(dir_path):
+            count += sum(1 for f in files if os.path.splitext(f)[1].lower() in exts)
+        return count
+
+    def _validate_dataset_before_training(self, data_yaml: str) -> tuple:
+        """Validate dataset labels before starting training.
+
+        Returns:
+            (is_fatal: bool, warnings: list[str], errors: list[str])
+            - is_fatal: True if training should be BLOCKED
+            - warnings: issues the user should know about (training can proceed)
+            - errors: issues that prevent meaningful training
+        """
+        warnings: list[str] = []
+        errors: list[str] = []
+
+        try:
+            import yaml
+        except ImportError:
+            errors.append("缺少 PyYAML 库，无法解析 data.yaml")
+            return True, warnings, errors
+
+        yaml_dir = os.path.dirname(os.path.abspath(data_yaml))
+
+        try:
+            with open(data_yaml, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+        except Exception as e:
+            errors.append(f"无法解析 data.yaml: {e}")
+            return True, warnings, errors
+
+        nc = data.get("nc", 0)
+        dataset_root = data.get("path", "")
+        if dataset_root:
+            base_dir = os.path.abspath(dataset_root)
+        else:
+            base_dir = yaml_dir
+
+        def _resolve(split_path: str) -> str:
+            if not split_path:
+                return ""
+            if os.path.isabs(split_path):
+                return split_path
+            return os.path.normpath(os.path.join(base_dir, split_path))
+
+        train_path = _resolve(data.get("train", ""))
+        val_path = _resolve(data.get("val", ""))
+
+        for split_name, split_path in [("验证集", val_path), ("训练集", train_path)]:
+            if not split_path:
+                if split_name == "验证集":
+                    errors.append("data.yaml 中缺少 'val' 路径，训练无法计算 mAP")
+                else:
+                    warnings.append("data.yaml 中缺少 'train' 路径")
+                continue
+            if not os.path.isdir(split_path):
+                if split_name == "验证集":
+                    errors.append(f"{split_name}目录不存在: {split_path}")
+                else:
+                    warnings.append(f"{split_name}目录不存在: {split_path}")
+                continue
+
+            images = self._count_images(split_path)
+            if images == 0:
+                if split_name == "验证集":
+                    errors.append(f"{split_name}中没有图片 ({split_path})")
+                else:
+                    errors.append(f"{split_name}中没有图片 ({split_path})")
+                continue
+
+            # Derive labels directory (replace "images" with "labels")
+            lbl_dir = split_path.replace(os.sep + "images" + os.sep, os.sep + "labels" + os.sep, 1)
+            if lbl_dir == split_path:
+                lbl_dir = os.path.join(os.path.dirname(split_path), "labels",
+                                       os.path.basename(split_path))
+
+            if not os.path.isdir(lbl_dir):
+                if split_name == "验证集":
+                    errors.append(f"{split_name}标签目录不存在 ({lbl_dir}) — 训练将无法计算 mAP")
+                else:
+                    warnings.append(f"{split_name}标签目录不存在 ({lbl_dir})")
+                continue
+
+            lbl_files = {os.path.splitext(f)[0] for f in os.listdir(lbl_dir)
+                         if os.path.isfile(os.path.join(lbl_dir, f)) and f.endswith(".txt")}
+            img_names = {os.path.splitext(f)[0] for f in os.listdir(split_path)
+                         if os.path.isfile(os.path.join(split_path, f))}
+
+            missing = img_names - lbl_files
+            missing_count = len(missing)
+
+            if split_name == "验证集":
+                if missing_count == images:
+                    errors.append(
+                        f"{split_name}：{images} 张图片全部没有标签 — 训练 mAP 将始终为 0，请检查数据集标注"
+                    )
+                elif missing_count > 0:
+                    warnings.append(f"{split_name}：{missing_count}/{images} 张图片缺少标签")
+            else:
+                if missing_count == images:
+                    warnings.append(f"{split_name}：{images} 张图片全部没有标签（将作为无监督图片使用）")
+                elif missing_count > 0:
+                    warnings.append(f"{split_name}：{missing_count}/{images} 张图片缺少标签")
+
+            # Sample up to 50 label files to validate format
+            valid_lbl_files = [os.path.join(lbl_dir, f"{n}.txt") for n in (img_names & lbl_files)]
+            if valid_lbl_files:
+                sample = valid_lbl_files[:50]
+                invalid_count = 0
+                bad_class_count = 0
+                for lbl_path in sample:
+                    try:
+                        with open(lbl_path, "r", encoding="utf-8") as lf:
+                            for line in lf:
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                parts = line.split()
+                                n_cols = len(parts)
+                                # YOLO format: class_id + bbox(4) = 5 minimum
+                                # OBB: 8, Keypoint: 5 + 3*k, Seg: 5 + 2*n
+                                if n_cols < 5:
+                                    invalid_count += 1
+                                    break
+                                if nc > 0:
+                                    try:
+                                        cls_id = int(parts[0])
+                                        if cls_id < 0 or cls_id >= nc:
+                                            bad_class_count += 1
+                                            break
+                                    except ValueError:
+                                        invalid_count += 1
+                                        break
+                    except Exception:
+                        invalid_count += 1
+
+                if invalid_count > 0:
+                    if split_name == "验证集":
+                        errors.append(f"{split_name}：{invalid_count} 个标签格式无效（每行至少需要 5 列数据）")
+                    else:
+                        warnings.append(f"{split_name}：{invalid_count} 个标签格式无效")
+                if bad_class_count > 0:
+                    errors.append(f"{split_name}：{bad_class_count} 个标签的类别 ID 超出范围 (nc={nc})")
+
+        # Additional checks
+        train_imgs = self._count_images(train_path) if train_path else 0
+        if train_path and os.path.isdir(train_path) and train_imgs < 10:
+            warnings.append(f"训练集仅有 {train_imgs} 张图片，建议至少 30 张以获得较好效果")
+
+        return bool(errors), warnings, errors
+
     def _auto_detect_font(self) -> str:
         """Auto-detect Arial.Unicode.ttf in project root or common locations."""
+        from freeze import get_resource_path
         candidates = [
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Arial.Unicode.ttf"),
+            str(get_resource_path("Arial.Unicode.ttf")),
             os.path.join(os.getcwd(), "Arial.Unicode.ttf"),
             os.path.join(os.path.expanduser("~"), "AppData", "Roaming", "Ultralytics", "Arial.Unicode.ttf"),
             os.path.join(os.path.expanduser("~"), ".config", "Ultralytics", "Arial.Unicode.ttf"),
@@ -1083,7 +1249,6 @@ class TrainingPanel(QWidget):
         if not font_path or not os.path.isfile(font_path):
             return False
 
-        import shutil
         target_name = "Arial.Unicode.ttf"
 
         if sys.platform == "win32":
@@ -1128,16 +1293,6 @@ class TrainingPanel(QWidget):
 
         yaml_dir = os.path.dirname(os.path.abspath(data_yaml))
 
-        def _count_images(dir_path: str) -> int:
-            if not dir_path or not os.path.isdir(dir_path):
-                return 0
-            exts = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
-            return sum(
-                1 for f in os.listdir(dir_path)
-                if os.path.isfile(os.path.join(dir_path, f))
-                and os.path.splitext(f)[1].lower() in exts
-            )
-
         # Resolve paths relative to yaml dir
         train_path = data.get("train", "")
         if train_path and not os.path.isabs(train_path):
@@ -1146,8 +1301,8 @@ class TrainingPanel(QWidget):
         if val_path and not os.path.isabs(val_path):
             val_path = os.path.join(yaml_dir, val_path)
 
-        train_count = _count_images(train_path)
-        val_count = _count_images(val_path)
+        train_count = self._count_images(train_path)
+        val_count = self._count_images(val_path)
         total = train_count + val_count
         nc = data.get("nc", 1)
 
@@ -1390,6 +1545,24 @@ class TrainingPanel(QWidget):
             QMessageBox.warning(self, "错误", "请先选择有效的 data.yaml 文件")
             return
 
+        # Validate dataset labels before training
+        is_fatal, warnings, errors = self._validate_dataset_before_training(args["data_yaml"])
+
+        if errors:
+            msg = "数据集验证失败，训练已取消：\n\n" + "\n".join(f"  • {e}" for e in errors)
+            if warnings:
+                msg += "\n\n警告：\n" + "\n".join(f"  • {w}" for w in warnings)
+            QMessageBox.critical(self, "数据集错误", msg)
+            return
+
+        if warnings:
+            msg = "数据集验证发现以下问题，建议检查后再训练：\n\n" + "\n".join(f"  • {w}" for w in warnings)
+            reply = QMessageBox.warning(self, "数据集警告", msg,
+                                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                        QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.No:
+                return
+
         # Inject font to avoid ultralytics downloading Arial.Unicode.ttf from internet
         font_path = self.font_path_edit.text().strip()
         if not font_path:
@@ -1428,6 +1601,7 @@ class TrainingPanel(QWidget):
         self._live_logs = {"epochs": []}
 
         # Start worker thread
+        self._cleanup_worker()
         self.worker = TrainingWorker(self.trainer, args["data_yaml"], **kwargs)
         self.worker.progress.connect(self.on_progress)
         self.worker.finished.connect(self.on_finished)
@@ -1436,6 +1610,16 @@ class TrainingPanel(QWidget):
         # Start polling epoch metrics from worker
         self._epoch_timer.start()
 
+    def _cleanup_worker(self):
+        if self.worker is not None:
+            if self.worker.isRunning():
+                self.worker.quit()
+                if not self.worker.wait(3000):
+                    self.worker.terminate()
+                    self.worker.wait(1000)
+            self.worker.deleteLater()
+            self.worker = None
+
     def stop_training(self):
         """Stop the training process."""
         # Signal Ultralytics trainer to stop
@@ -1443,15 +1627,13 @@ class TrainingPanel(QWidget):
             try:
                 self.trainer.model.trainer.stop_training = True
             except Exception:
-                pass
+                pass  # harmless: best-effort signal, our trainer stops on next line
         self.trainer.stop_training()
         self.log_text.append("\n正在停止训练...\n")
 
     def on_progress(self, text: str):
         """Handle training progress output — append to log panel."""
         # Filter out ANSI escape codes for cleaner display
-        import re
-        # Strip ANSI sequences
         clean = re.sub(r'\x1b\[[0-9;]*[mGKHJF]', '', text)
         if clean.strip():
             self.log_text.append(clean.rstrip())
@@ -1538,6 +1720,7 @@ class TrainingPanel(QWidget):
 
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
+        self._cleanup_worker()
 
         if result.get("success"):
             self.progress_bar.setValue(100)

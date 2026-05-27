@@ -2,11 +2,9 @@
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QComboBox,
-    QPushButton, QFileDialog, QProgressBar, QMessageBox, QCheckBox,
-    QSpinBox, QDoubleSpinBox
+    QPushButton, QFileDialog, QProgressBar, QMessageBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QThread, QObject
-from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import pyqtSignal, QThread, QObject
 from pathlib import Path
 from typing import Optional
 from loguru import logger
@@ -192,6 +190,8 @@ class FormatConversionDialog(QDialog):
         self.status_label.setText("转换中...")
         self.convert_btn.setEnabled(False)
 
+        self._cleanup_conversion()
+
         self.conversion_worker = ConversionWorker(
             self.converter,
             input_dir,
@@ -214,6 +214,23 @@ class FormatConversionDialog(QDialog):
 
         self.conversion_thread.start()
 
+    def _cleanup_conversion(self):
+        """Clean up worker and thread from previous conversion."""
+        if hasattr(self, "conversion_thread") and self.conversion_thread is not None:
+            if self.conversion_thread.isRunning():
+                self.conversion_thread.quit()
+                self.conversion_thread.wait(3000)
+            self.conversion_thread.deleteLater()
+            self.conversion_thread = None
+        if hasattr(self, "conversion_worker") and self.conversion_worker is not None:
+            self.conversion_worker.deleteLater()
+            self.conversion_worker = None
+
+    def closeEvent(self, event):
+        """Stop running conversion before closing."""
+        self._cleanup_conversion()
+        super().closeEvent(event)
+
     def on_conversion_finished(self):
         """Handle conversion finished."""
         self.convert_btn.setEnabled(True)
@@ -221,6 +238,7 @@ class FormatConversionDialog(QDialog):
         QMessageBox.information(self, "成功", f"转换完成！\n输出目录: {output_dir}")
         self.conversion_finished.emit(output_dir)
         logger.info(f"Conversion finished: {output_dir}")
+        self._cleanup_conversion()
 
     def on_conversion_error(self, error_msg: str):
         """Handle conversion error."""

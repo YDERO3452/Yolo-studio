@@ -13,13 +13,13 @@ from PyQt6.QtWidgets import (
     QPushButton, QTextEdit, QProgressBar, QGroupBox,
     QMessageBox, QScrollArea, QWidget, QFrame, QFileDialog,
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QFont, QColor, QPalette
+from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtGui import QFont
 from loguru import logger
 
 from core.env_setup import (
     detect_environment, diagnose_environment, format_diagnosis_html,
-    format_diagnosis_summary, _get_pytorch_install_cmd,
+    _get_pytorch_install_cmd,
     get_python_wheel_tags, get_pytorch_install_commands,
     get_pytorch_install_plan,
     EnvInfo, DiagnosisItem, GPUVendor,
@@ -39,6 +39,27 @@ class _EnvDetectWorker(QThread):
         except Exception as e:
             logger.error(f"Environment detection failed: {e}")
             self.finished.emit(None, [])
+
+
+class _PipInstallWorker(QThread):
+    """Background thread for pip install operations."""
+
+    finished = pyqtSignal(int, str, str)  # returncode, stdout, stderr
+
+    def __init__(self, cmd: list, parent=None):
+        super().__init__(parent)
+        self.cmd = cmd
+
+    def run(self):
+        try:
+            result = subprocess.run(
+                self.cmd, capture_output=True, text=True, timeout=600
+            )
+            self.finished.emit(result.returncode, result.stdout, result.stderr)
+        except subprocess.TimeoutExpired:
+            self.finished.emit(-1, "", "安装超时（10分钟限制），请手动安装。")
+        except Exception as e:
+            self.finished.emit(-1, "", str(e))
 
 
 class EnvironmentCheckDialog(QDialog):
@@ -378,7 +399,7 @@ class EnvironmentCheckDialog(QDialog):
             import webbrowser
             webbrowser.open(url)
         except Exception:
-            pass
+            pass  # harmless: browser may not be available or URL fails to open
 
     def _copy_install_cmd(self):
         """Copy the install commands to clipboard (only executable lines)."""
@@ -442,7 +463,7 @@ class EnvironmentCheckDialog(QDialog):
             self._run_pip_install(f"PyTorch ({plan.get('wheel_tag')})", cmd)
 
     def _download_pytorch_wheels(self):
-        """Download matching PyTorch wheels using pip download."""
+        """Download matching PyTorch wheels using pip download (async)."""
         if not self._env:
             return
         torch_cmds = get_pytorch_install_commands(self._env)
@@ -460,29 +481,12 @@ class EnvironmentCheckDialog(QDialog):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        try:
-            result = subprocess.run(
-                shlex.split(cmd),
-                capture_output=True,
-                text=True,
-                timeout=600,
-            )
-            if result.returncode == 0:
-                QMessageBox.information(
-                    self, "下载完成",
-                    f"PyTorch wheel 已下载到:\n{download_dir}\n\n"
-                    f"可使用「安装本地 wheel」按钮从该目录安装，\n"
-                    f"或手动执行:\n{torch_cmds['install_local_dir']}"
-                )
-            else:
-                QMessageBox.critical(
-                    self, "下载失败",
-                    f"下载 PyTorch wheel 失败:\n\n{result.stderr[:2000]}"
-                )
-        except subprocess.TimeoutExpired:
-            QMessageBox.warning(self, "超时", "下载超时（10分钟限制），请手动下载。")
-        except Exception as e:
-            QMessageBox.critical(self, "下载出错", str(e))
+        self._pip_install_name = "下载 PyTorch wheel"
+        self._pip_extra_info = f"PyTorch wheel 已下载到:\n{download_dir}\n\n可使用「安装本地 wheel」按钮从该目录安装，\n或手动执行:\n{torch_cmds['install_local_dir']}"
+        self._install_btn_set_enabled(False)
+        self._pip_worker = _PipInstallWorker(shlex.split(cmd), self)
+        self._pip_worker.finished.connect(self._on_pip_install_done)
+        self._pip_worker.start()
 
     def _install_local_wheels(self):
         if not self._env:
@@ -513,35 +517,20 @@ class EnvironmentCheckDialog(QDialog):
         self._run_pip_install("本地 PyTorch wheel", cmd)
 
     def _run_pip_install_direct(self, name: str, cmd: str):
-        """Run a pip install command (user already confirmed) and show result."""
-        try:
-            result = subprocess.run(
-                shlex.split(cmd),
-                capture_output=True,
-                text=True,
-                timeout=600,
-            )
-            if result.returncode == 0:
-                QMessageBox.information(
-                    self, "安装成功",
-                    f"{name} 安装完成！\n\n点击「重新检测」验证安装结果。"
-                )
-            else:
-                QMessageBox.critical(
-                    self, "安装失败",
-                    f"{name} 安装失败:\n\n{result.stderr[:2000]}"
-                )
-        except subprocess.TimeoutExpired:
-            QMessageBox.warning(self, "超时", f"{name} 安装超时（10分钟限制），请手动安装。")
-        except Exception as e:
-            QMessageBox.critical(self, "安装出错", str(e))
+        """Run a pip install command (user already confirmed) in background."""
+        self._pip_install_name = name
+        self._pip_extra_info = ""
+        self._install_btn_set_enabled(False)
+        self._pip_worker = _PipInstallWorker(shlex.split(cmd), self)
+        self._pip_worker.finished.connect(self._on_pip_install_done)
+        self._pip_worker.start()
 
     def _install_ultralytics(self):
         """Install Ultralytics via pip."""
         self._run_pip_install("Ultralytics", "pip install ultralytics")
 
     def _run_pip_install(self, name: str, cmd: str):
-        """Run a pip install command and show result."""
+        """Run a pip install command (async) and show result."""
         reply = QMessageBox.question(
             self, f"安装 {name}",
             f"即将执行:\n\n{cmd}\n\n确认安装？",
@@ -550,27 +539,44 @@ class EnvironmentCheckDialog(QDialog):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        try:
-            result = subprocess.run(
-                shlex.split(cmd),
-                capture_output=True,
-                text=True,
-                timeout=600,
+        self._pip_install_name = name
+        self._pip_extra_info = ""
+        self._install_btn_set_enabled(False)
+        self._pip_worker = _PipInstallWorker(shlex.split(cmd), self)
+        self._pip_worker.finished.connect(self._on_pip_install_done)
+        self._pip_worker.start()
+
+    def _on_pip_install_done(self, returncode: int, stdout: str, stderr: str):
+        """Handle pip install completion."""
+        self._install_btn_set_enabled(True)
+        if returncode == 0:
+            msg = f"{self._pip_install_name} 安装完成！\n\n点击「重新检测」验证安装结果。"
+            if self._pip_extra_info:
+                msg = self._pip_extra_info
+            QMessageBox.information(self, "操作成功", msg)
+        else:
+            QMessageBox.critical(
+                self, "操作失败",
+                f"{self._pip_install_name} 失败:\n\n{stderr[:2000]}"
             )
-            if result.returncode == 0:
-                QMessageBox.information(
-                    self, "安装成功",
-                    f"{name} 安装完成！\n\n点击「重新检测」验证安装结果。"
-                )
-            else:
-                QMessageBox.critical(
-                    self, "安装失败",
-                    f"{name} 安装失败:\n\n{result.stderr[:2000]}"
-                )
-        except subprocess.TimeoutExpired:
-            QMessageBox.warning(self, "超时", f"{name} 安装超时（10分钟限制），请手动安装。")
-        except Exception as e:
-            QMessageBox.critical(self, "安装出错", str(e))
+
+    def _install_btn_set_enabled(self, enabled: bool):
+        """Enable or disable all quick install buttons, saving/restoring state."""
+        btn_names = ("install_pytorch_btn", "download_wheels_btn",
+                      "install_local_wheel_btn", "install_ultralytics_btn")
+        if not enabled:
+            self._saved_btn_states = {}
+            for name in btn_names:
+                btn = getattr(self, name, None)
+                if btn is not None:
+                    self._saved_btn_states[name] = btn.isEnabled()
+                    btn.setEnabled(False)
+        else:
+            saved = getattr(self, "_saved_btn_states", {})
+            for name in btn_names:
+                btn = getattr(self, name, None)
+                if btn is not None and name in saved:
+                    btn.setEnabled(saved[name])
 
     def _open_driver_download(self):
         """Open NVIDIA driver download page in browser."""

@@ -1,8 +1,8 @@
 """Shared test fixtures for Yolo Studio."""
 
-import os
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -10,6 +10,85 @@ import pytest
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+
+# -----------------------------------------------------------------------
+# Mock heavy imports at module level — MUST run before pytest collects
+# tests, because importing test files triggers project imports which try
+# to load torch / ultralytics / PyQt6 / etc.
+# -----------------------------------------------------------------------
+
+class _LazyMockModule:
+    """Lazy-creating mock for module-level symbols.
+
+    On attribute access it returns MagicMock (the class, not an instance),
+    so the result can be used as a base class, an import target, or
+    instantiated.  Known sub-packages (pre-registered in sys.modules) are
+    returned as _LazyMockModule instances for further traversal.
+    """
+
+    def __init__(self, name):
+        object.__setattr__(self, "_name", name)
+
+    def __getattr__(self, attr):
+        if attr.startswith("_"):
+            raise AttributeError(attr)
+        child_name = f"{self._name}.{attr}"
+        # If it's a known submodule, return the module mock
+        if child_name in sys.modules:
+            return sys.modules[child_name]
+        # Otherwise return MagicMock CLASS — valid as base class / callable
+        return MagicMock
+
+    def __call__(self, *args, **kwargs):
+        return MagicMock()(*args, **kwargs)
+
+
+def _mock_module(name, attrs=None):
+    """Inject a lazy-mock module into sys.modules if not already present."""
+    if name not in sys.modules:
+        m = _LazyMockModule(name)
+        if attrs:
+            for k, v in attrs.items():
+                object.__setattr__(m, k, v)
+        sys.modules[name] = m
+
+
+# Pre-populate with heavy modules that may not be installed
+_mock_module("torch")
+_mock_module("torch.multiprocessing")
+_mock_module("torch.multiprocessing.spawn")
+_mock_module("torchvision")
+_mock_module("torchvision.ops")
+_mock_module("ultralytics")
+_mock_module("ultralytics.nn")
+_mock_module("ultralytics.utils")
+_mock_module("ultralytics.data")
+_mock_module("ultralytics.engine")
+_mock_module("cv2", {"__version__": "4.8.0"})
+_mock_module("albumentations")
+_mock_module("transformers")
+_mock_module("accelerate")
+_mock_module("onnxruntime")
+_mock_module("onnx")
+_mock_module("PyQt6")
+_mock_module("PyQt6.QtWidgets")
+_mock_module("PyQt6.QtCore")
+_mock_module("PyQt6.QtGui")
+_mock_module("PyQt6.QtSvg")
+_mock_module("PyQt6.QtSvgWidgets")
+_mock_module("PyQt6.sip")
+_mock_module("matplotlib")
+_mock_module("matplotlib.backends")
+_mock_module("matplotlib.backends.backend_qtagg")
+_mock_module("matplotlib.backends.backend_agg")
+_mock_module("matplotlib.figure")
+_mock_module("sklearn")
+_mock_module("sklearn.metrics")
+
+
+# -----------------------------------------------------------------------
+# Fixtures
+# -----------------------------------------------------------------------
 
 @pytest.fixture
 def tmp_dir(tmp_path):

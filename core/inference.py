@@ -17,6 +17,8 @@ import cv2
 import numpy as np
 from loguru import logger
 
+from core.geometry_utils import obb_xywhr_to_corners
+
 
 class YOLOInference:
     """Manages YOLO model inference for images, videos, and webcam."""
@@ -254,17 +256,8 @@ class YOLOInference:
                     }
                     # xywhr format: [cx, cy, w, h, rotation]
                     if obb.xywhr is not None and len(obb.xywhr[i]) >= 5:
-                        import math
                         cx, cy, w, h, r = obb.xywhr[i].cpu().numpy().tolist()[:5]
-                        # Convert to 4 corner points
-                        cos_a = math.cos(r)
-                        sin_a = math.sin(r)
-                        corners = []
-                        for dx, dy in [(-w/2, -h/2), (w/2, -h/2), (w/2, h/2), (-w/2, h/2)]:
-                            px = cx + dx * cos_a - dy * sin_a
-                            py = cy + dx * sin_a + dy * cos_a
-                            corners.append((px, py))
-                        det["corners"] = corners
+                        det["corners"] = obb_xywhr_to_corners(cx, cy, w, h, r)
                         # Also provide xyxy bbox for compatibility
                         det["bbox"] = {
                             "x1": float(obb.xyxy[i][0]),

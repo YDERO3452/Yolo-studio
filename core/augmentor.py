@@ -79,8 +79,8 @@ class DataAugmentor:
         out_images.mkdir(parents=True, exist_ok=True)
         out_labels.mkdir(parents=True, exist_ok=True)
 
-        image_extensions = {".jpg", ".jpeg", ".png", ".bmp"}
-        image_files = [f for f in images_path.iterdir() if f.suffix.lower() in image_extensions]
+        image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+        image_files = [f for f in images_path.rglob("*") if f.is_file() and f.suffix.lower() in image_extensions]
 
         if self.transform is None:
             self.build_transform()

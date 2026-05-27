@@ -163,7 +163,7 @@ class DatasetPanel(QWidget):
         # Class distribution
         self.class_table = QTableWidget()
         self.class_table.setColumnCount(2)
-        self.class_table.setHorizontalHeaderLabels(["类别", "数量"])
+        self.class_table.setHorizontalHeaderLabels(["类别", "ID"])
         self.class_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         class_label = QLabel("类别分布:")
         class_label.setObjectName("MutedText")

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from collections import Counter
 from loguru import logger
 
+from core.annotation_utils import collect_annotation_stats
+
 import numpy as np
 
 
@@ -25,8 +27,8 @@ class WorkflowBatchProcessor:
     """Batch processing for annotations."""
 
     def __init__(self):
-        """Initialize BatchProcessor."""
-        logger.info("BatchProcessor initialized")
+        """Initialize WorkflowBatchProcessor."""
+        logger.info("WorkflowBatchProcessor initialized")
 
     def batch_export(
         self,
@@ -121,8 +123,8 @@ class WorkflowBatchProcessor:
         # Get all images
         image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
         image_files = [
-            f for f in Path(image_dir).iterdir()
-            if f.suffix.lower() in image_extensions
+            f for f in Path(image_dir).rglob("*")
+            if f.is_file() and f.suffix.lower() in image_extensions
         ]
         results["total_images"] = len(image_files)
 
@@ -134,15 +136,23 @@ class WorkflowBatchProcessor:
                 detections = model_manager.predict(str(image_file), conf, iou)
 
                 if detections:
-                    # Save annotations
+                    # Save annotations in normalized YOLO format
+                    from PIL import Image
+                    img = Image.open(image_file)
+                    img_w, img_h = img.size
+
                     output_file = Path(output_dir) / image_file.stem
                     output_file = output_file.with_suffix(".txt")
 
                     with open(output_file, "w", encoding="utf-8") as f:
                         for det in detections:
                             bbox = det.get("bbox", [0, 0, 0, 0])
-                            line = f"{det['class_id']} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}\n"
-                            f.write(line)
+                            x1, y1, x2, y2 = bbox[:4]
+                            xc = ((x1 + x2) / 2) / img_w
+                            yc = ((y1 + y2) / 2) / img_h
+                            w = (x2 - x1) / img_w
+                            h = (y2 - y1) / img_h
+                            f.write(f"{det['class_id']} {xc:.6f} {yc:.6f} {w:.6f} {h:.6f}\n")
 
                     results["successful"] += 1
                     results["total_detections"] += len(detections)
@@ -193,8 +203,8 @@ class AnnotationValidator:
         # Get all images
         image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
         image_files = [
-            f for f in Path(image_dir).iterdir()
-            if f.suffix.lower() in image_extensions
+            f for f in Path(image_dir).rglob("*")
+            if f.is_file() and f.suffix.lower() in image_extensions
         ]
         report["total_images"] = len(image_files)
 
@@ -326,69 +336,33 @@ class DataQualityChecker:
         Returns:
             QualityMetrics object
         """
-        metrics = QualityMetrics(
-            total_images=0,
-            total_annotations=0,
-            avg_annotations_per_image=0,
-            class_distribution={},
-            annotation_size_stats={},
-            missing_annotations=[],
-            duplicate_annotations=[],
-        )
+        (total_images, total_annotations, _annotated,
+         class_counts, annotation_sizes,
+         missing_annotations) = collect_annotation_stats(
+            image_dir, annotation_dir, class_names)
 
-        # Get all images
-        image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
-        image_files = [
-            f for f in Path(image_dir).iterdir()
-            if f.suffix.lower() in image_extensions
-        ]
-        metrics.total_images = len(image_files)
+        avg_per_image = total_annotations / total_images if total_images > 0 else 0
 
-        class_counts = Counter()
-        annotation_sizes = []
-
-        for image_file in image_files:
-            ann_file = Path(annotation_dir) / image_file.stem
-            ann_file = ann_file.with_suffix(".txt")
-
-            if not ann_file.exists():
-                metrics.missing_annotations.append(image_file.name)
-                continue
-
-            try:
-                with open(ann_file, "r", encoding="utf-8") as f:
-                    lines = f.readlines()
-                    metrics.total_annotations += len(lines)
-                    annotation_sizes.append(len(lines))
-
-                    for line in lines:
-                        parts = line.strip().split()
-                        if len(parts) >= 1:
-                            try:
-                                class_id = int(parts[0])
-                                if class_id < len(class_names):
-                                    class_counts[class_names[class_id]] += 1
-                            except ValueError:
-                                pass
-
-            except Exception as e:
-                logger.error(f"Error reading {ann_file}: {e}")
-
-        # Calculate statistics
-        if metrics.total_images > 0:
-            metrics.avg_annotations_per_image = metrics.total_annotations / metrics.total_images
-
-        metrics.class_distribution = dict(class_counts)
-
+        size_stats = {}
         if annotation_sizes:
-            metrics.annotation_size_stats = {
+            size_stats = {
                 "min": min(annotation_sizes),
                 "max": max(annotation_sizes),
                 "mean": np.mean(annotation_sizes),
                 "std": np.std(annotation_sizes),
             }
 
-        logger.info(f"Quality check completed: {metrics.total_images} images, {metrics.total_annotations} annotations")
+        metrics = QualityMetrics(
+            total_images=total_images,
+            total_annotations=total_annotations,
+            avg_annotations_per_image=avg_per_image,
+            class_distribution=dict(class_counts),
+            annotation_size_stats=size_stats,
+            missing_annotations=missing_annotations,
+            duplicate_annotations=[],
+        )
+
+        logger.info(f"Quality check completed: {total_images} images, {total_annotations} annotations")
 
         return metrics
 

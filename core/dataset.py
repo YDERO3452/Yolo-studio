@@ -27,7 +27,6 @@ YOLO automatically replaces "images" with "labels" in the path to
 find label files, so only image paths need to be specified.
 """
 
-import os
 import shutil
 import random
 from pathlib import Path
@@ -462,7 +461,7 @@ class DatasetManager:
 
         if not class_set:
             return ["目标"]
-        return [f"类别_{i}" for i in range(max(class_set) + 1)]
+        return [f"类别_{i}" for i in sorted(class_set)]
 
     @staticmethod
     def _split_into_train_val(

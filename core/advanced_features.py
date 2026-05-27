@@ -1,12 +1,12 @@
 """Advanced features module for annotation statistics and reporting."""
 
 import json
-from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
-from collections import Counter
 from datetime import datetime
 from loguru import logger
+
+from core.annotation_utils import collect_annotation_stats
 
 import numpy as np
 
@@ -47,47 +47,10 @@ class AnnotationStatisticsCollector:
         Returns:
             AnnotationStatistics object
         """
-        image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
-        image_files = [
-            f for f in Path(image_dir).iterdir()
-            if f.suffix.lower() in image_extensions
-        ]
+        (total_images, total_annotations, annotated_images,
+         class_counts, annotation_sizes, _missing) = collect_annotation_stats(
+            image_dir, annotation_dir, class_names)
 
-        total_images = len(image_files)
-        total_annotations = 0
-        class_counts = Counter()
-        annotation_sizes = []
-        annotated_images = 0
-
-        for image_file in image_files:
-            ann_file = Path(annotation_dir) / image_file.stem
-            ann_file = ann_file.with_suffix(".txt")
-
-            if not ann_file.exists():
-                continue
-
-            annotated_images += 1
-
-            try:
-                with open(ann_file, "r", encoding="utf-8") as f:
-                    lines = f.readlines()
-                    total_annotations += len(lines)
-                    annotation_sizes.append(len(lines))
-
-                    for line in lines:
-                        parts = line.strip().split()
-                        if len(parts) >= 1:
-                            try:
-                                class_id = int(parts[0])
-                                if class_id < len(class_names):
-                                    class_counts[class_names[class_id]] += 1
-                            except ValueError:
-                                pass
-
-            except Exception as e:
-                logger.error(f"Error reading {ann_file}: {e}")
-
-        # Calculate statistics
         avg_annotations = total_annotations / total_images if total_images > 0 else 0
         image_coverage = annotated_images / total_images if total_images > 0 else 0
 

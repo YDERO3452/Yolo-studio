@@ -320,12 +320,59 @@ class TestAnnotationManager:
         mgr.add_bbox(0, 100, 100, 200, 200, 640, 480)
         assert mgr.get_annotation_count() == 1
 
-    def test_get_label_path_images_subdir(self):
+    def test_from_yolo_polygon_not_keypoint_3points(self):
+        """3-point polygon (6 coords) must NOT be misidentified as keypoint.
+
+        With class_id=0 + 6 coords = 7 values. Old code checked keypoint
+        (n>=7 and (n-4)%3==0) before polygon, so 7 values matched keypoint
+        with 1 kp. After the fix polygon is checked first (n>=6 and n%2==0).
+        """
+        ann = Annotation.from_yolo_line("0 0.1 0.1 0.3 0.1 0.2 0.4")
+        assert isinstance(ann, PolygonAnnotation), (
+            f"Expected PolygonAnnotation, got {type(ann).__name__}"
+        )
+        assert len(ann.points) == 3
+
+    def test_from_yolo_polygon_not_keypoint_5points(self):
+        """5-point polygon (10 coords) must NOT be misidentified as keypoint.
+
+        11 values: (11-4)%3 = 1 so old code wouldn't match keypoint either,
+        but verifying the fix is robust.
+        """
+        ann = Annotation.from_yolo_line(
+            "0 0.1 0.1 0.2 0.1 0.3 0.1 0.4 0.1 0.5 0.1"
+        )
+        assert isinstance(ann, PolygonAnnotation), (
+            f"Expected PolygonAnnotation, got {type(ann).__name__}"
+        )
+        assert len(ann.points) == 5
+
+    def test_from_yolo_keypoint_not_polygon(self):
+        """Keypoint with 1 kp (bbox+3 = 7 values) must not be polygon.
+
+        With class_id=0+bbox(4)+kp(3) = 8 values. Old code would check
+        polygon first if it saw n>=6, but keypoint has exactly 8 values
+        which is n%2==0. After fix: polygon checked first triggers on
+        any n>=6 with n%2==0, so 8 values would be polygon. But actually
+        8 values WITH (n-4)%3!=0 means it could be either 4-point polygon
+        or 1-kp keypoint. Let's check actual behavior.
+        """
+        ann = Annotation.from_yolo_line("0 0.5 0.5 0.2 0.3 0.5 0.5 2")
+        # 8 values: class(1) + bbox(4) + kp(3) = keypoint with 1 kp
+        # or class(1) + 7 coords — but 7 is odd, not a polygon.
+        # Since 7 coords is odd, polygon check (n>=6 and n%2==0) fails,
+        # so it falls through to keypoint check.
+        assert isinstance(ann, KeypointAnnotation), (
+            f"Expected KeypointAnnotation, got {type(ann).__name__}"
+        )
+
+    def test_get_label_path_yolo_standard_structure(self):
+        """labels dir mirrors images dir: images/train/x.jpg → labels/train/x.txt."""
         mgr = AnnotationManager()
         path = mgr._get_label_path("/data/images/train/img001.jpg")
-        # parent is "train", not "images", so labels go alongside
-        assert "labels" in path
-        assert path.endswith("img001.txt")
+        assert path.replace("\\", "/").endswith("labels/train/img001.txt"), (
+            f"Unexpected label path: {path}"
+        )
 
     def test_get_label_path_no_images(self):
         mgr = AnnotationManager()

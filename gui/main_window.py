@@ -12,10 +12,8 @@ import traceback
 from pathlib import Path
 from typing import List, Optional
 
-import cv2
-import numpy as np
-from PyQt6.QtCore import QObject, QEvent, QPoint, QSize, Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QFont, QIcon, QImageReader, QKeySequence, QPainter, QPixmap
+from PyQt6.QtCore import QEvent, QSize, Qt, QThread
+from PyQt6.QtGui import QAction, QFont, QIcon, QKeySequence, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -32,8 +30,6 @@ from PyQt6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -46,8 +42,6 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QTabWidget,
     QTextEdit,
-    QTreeWidget,
-    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -57,6 +51,7 @@ from core.annotation import ShapeType
 from core.class_manager import ClassManager
 from core.config import ConfigManager
 from core.dataset import DatasetManager
+from core.image_utils import read_image_size
 from core.model_manager import ModelManager
 from core.project_manager import ProjectManager
 from gui.advanced_features_panel import AdvancedFeaturesPanel
@@ -65,7 +60,6 @@ from gui.annotation_io import (
     labels_dir_for_image_dir,
     load_yolo_shapes,
     save_yolo_shapes,
-    shape_type_value,
 )
 from gui.canvas import AnnotationCanvas, CanvasMode
 from gui.class_panel import ClassListPanel
@@ -76,7 +70,7 @@ from gui.project_panel import ProjectPanel
 from gui.theme import Theme, build_stylesheet
 from gui.training_panel import TrainingPanel
 from gui.training_results_panel import TrainingResultsPanel
-from gui.ui_components import Card, SectionTitle, StatusPill
+from gui.ui_components import StatusPill
 from gui.workflow_optimization_panel import WorkflowOptimizationPanel
 from gui.llm_handler import LLMBatchInferenceWorker, LLMInferenceWorker, load_llm_config, save_llm_config
 from gui.yolo_label_worker import YOLOAutoLabelWorker
@@ -123,7 +117,6 @@ class MainWindow(QMainWindow):
         self._init_statusbar()
         self._connect_signals()
         self._apply_theme()
-        self._show_launch_page()
         self._update_status()
 
         logger.info("MainWindow initialized")
@@ -143,23 +136,11 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        self.app_stack = QStackedWidget()
-        self.setCentralWidget(self.app_stack)
-
         self.project_panel = ProjectPanel(self.class_manager, parent=self)
-
-        self.launch_page = QWidget()
-        launch_layout = QVBoxLayout(self.launch_page)
-        launch_layout.setContentsMargins(0, 0, 0, 0)
-        launch_layout.setSpacing(0)
-        self.launch_project_host = QWidget()
-        launch_host_layout = QVBoxLayout(self.launch_project_host)
-        launch_host_layout.setContentsMargins(0, 0, 0, 0)
-        launch_host_layout.setSpacing(0)
-        launch_layout.addWidget(self.launch_project_host)
-        self.app_stack.addWidget(self.launch_page)
+        self.project_panel.setVisible(False)  # Not a workspace page; shown only via menu dialog
 
         self.workbench_page = QWidget()
+        self.setCentralWidget(self.workbench_page)
         root = QHBoxLayout(self.workbench_page)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -173,10 +154,6 @@ class MainWindow(QMainWindow):
         self.export_panel = ExportPanel(config_manager=self.config_manager, parent=self)
         self.quality_panel = self._create_quality_workspace()
         self.results_panel = TrainingResultsPanel(parent=self)
-        self.project_workspace_host = QWidget()
-        project_host_layout = QVBoxLayout(self.project_workspace_host)
-        project_host_layout.setContentsMargins(0, 0, 0, 0)
-        project_host_layout.setSpacing(0)
 
         self.workspace_stack.addWidget(
             self._wrap_workspace(
@@ -215,13 +192,6 @@ class MainWindow(QMainWindow):
         )
         self.workspace_stack.addWidget(
             self._wrap_workspace(
-                "项目",
-                "按项目管理图片、标签、类别、data.yaml 和训练输出。",
-                self.project_workspace_host,
-            )
-        )
-        self.workspace_stack.addWidget(
-            self._wrap_workspace(
                 "训练结果",
                 "浏览训练产物，直接送到推理或导出流程。",
                 self.results_panel,
@@ -230,44 +200,12 @@ class MainWindow(QMainWindow):
         self.nav_rail = self._create_nav_rail()
         root.addWidget(self.nav_rail)
         root.addWidget(self.workspace_stack, stretch=1)
-        self.app_stack.addWidget(self.workbench_page)
-        self._move_project_panel_to(self.launch_project_host)
-        self.app_stack.setCurrentWidget(self.launch_page)
-        self.workspace_stack.setCurrentIndex(6)
+        self.workspace_stack.setCurrentIndex(0)
         if hasattr(self, "annotation_tools_container"):
-            self.annotation_tools_container.setVisible(False)
+            self.annotation_tools_container.setVisible(True)
         self._update_project_gate()
 
         self.training_panel.model_ready.connect(self._on_trained_model_ready)
-
-    def _move_project_panel_to(self, host: QWidget) -> None:
-        old_parent = self.project_panel.parentWidget()
-        if old_parent is host:
-            return
-        if old_parent is not None and old_parent.layout() is not None:
-            old_parent.layout().removeWidget(self.project_panel)
-        layout = host.layout()
-        if layout is None:
-            layout = QVBoxLayout(host)
-            layout.setContentsMargins(0, 0, 0, 0)
-            layout.setSpacing(0)
-        layout.addWidget(self.project_panel)
-
-    def _show_launch_page(self) -> None:
-        if not hasattr(self, "app_stack"):
-            return
-        self._move_project_panel_to(self.launch_project_host)
-        self.app_stack.setCurrentWidget(self.launch_page)
-        self.menuBar().setVisible(False)
-        self.statusBar().setVisible(False)
-
-    def _show_workbench_page(self) -> None:
-        if not hasattr(self, "app_stack"):
-            return
-        self._move_project_panel_to(self.project_workspace_host)
-        self.app_stack.setCurrentWidget(self.workbench_page)
-        self.menuBar().setVisible(True)
-        self.statusBar().setVisible(True)
 
     def _create_nav_rail(self) -> QWidget:
         rail = QWidget()
@@ -281,11 +219,10 @@ class MainWindow(QMainWindow):
         self.workspace_tab_group.setExclusive(True)
         self.workspace_tab_buttons: dict[int, QPushButton] = {}
         for icon_name, index, tip in [
-            ("ws_project", 6, "项目"),
             ("ws_annotate", 0, "标注"),
             ("ws_dataset", 3, "数据集"),
             ("ws_train", 1, "训练"),
-            ("ws_results", 7, "训练结果"),
+            ("ws_results", 6, "训练结果"),
             ("ws_infer", 2, "推理"),
             ("ws_export", 4, "导出"),
             ("ws_qa", 5, "质检"),
@@ -301,7 +238,7 @@ class MainWindow(QMainWindow):
             self.workspace_tab_group.addButton(btn, index)
             self.workspace_tab_buttons[index] = btn
             layout.addWidget(btn)
-        self.workspace_tab_buttons[6].setChecked(True)
+        self.workspace_tab_buttons[0].setChecked(True)
 
         # Separator between workspace nav and annotation tools
         sep = QWidget()
@@ -349,6 +286,14 @@ class MainWindow(QMainWindow):
         fit_btn.clicked.connect(self.canvas.fit_to_window)
         tools_layout.addWidget(fit_btn)
 
+        tools_layout.addSpacing(10)
+        class_label = QLabel("类别")
+        class_label.setObjectName("MutedText")
+        tools_layout.addWidget(class_label)
+        self.class_quick_layout = QVBoxLayout()
+        self.class_quick_layout.setSpacing(2)
+        tools_layout.addLayout(self.class_quick_layout)
+
         layout.addWidget(self.annotation_tools_container)
         self.mode_actions[CanvasMode.CREATE_BBOX].setChecked(True)
 
@@ -391,7 +336,8 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _tool_icon(name: str) -> QIcon:
-        svg_path = Path(__file__).parent.parent / "resources" / "icons" / f"{name}.svg"
+        from freeze import get_resource_path
+        svg_path = get_resource_path(f"resources/icons/{name}.svg")
         if svg_path.exists():
             svg_data = svg_path.read_text(encoding="utf-8")
             svg_data = svg_data.replace("currentColor", Theme.TEXT)
@@ -411,7 +357,8 @@ class MainWindow(QMainWindow):
     def _create_annotation_control_bar_v2(self) -> QWidget:
         header = QWidget()
         header.setObjectName("AnnotationControlBar")
-        header.setFixedHeight(96)
+        header.setMinimumHeight(96)
+        header.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         layout = QVBoxLayout(header)
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(6)
@@ -700,17 +647,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(tabs, stretch=1)
         return inspector
 
-    def _build_tool_dialog(self, title: str, content: QWidget, size: QSize) -> QDialog:
-        dialog = QDialog(self)
-        dialog.setWindowTitle(title)
-        dialog.setModal(False)
-        dialog.resize(size)
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
-        layout.addWidget(content)
-        return dialog
-
     def _create_quality_workspace(self) -> QWidget:
         tabs = QTabWidget()
         tabs.addTab(AdvancedFeaturesPanel(self.class_manager, parent=self), "统计")
@@ -809,12 +745,11 @@ class MainWindow(QMainWindow):
 
     def _init_menus(self) -> None:
         menubar = self.menuBar()
-        self.workspace_actions: dict = {}
         self.project_required_actions: list[QAction] = []
 
         file_menu = menubar.addMenu("文件")
-        self.project_required_actions.append(self._add_action(file_menu, "打开目录", self._open_image_dir, "Ctrl+O"))
-        self.project_required_actions.append(self._add_action(file_menu, "打开图片", self._open_single_image, "Ctrl+I"))
+        self._add_action(file_menu, "打开目录", self._open_image_dir, "Ctrl+O")
+        self._add_action(file_menu, "打开图片", self._open_single_image, "Ctrl+I")
         file_menu.addSeparator()
         self.project_required_actions.append(self._add_action(file_menu, "保存", self._save_annotations, "Ctrl+S"))
         file_menu.addSeparator()
@@ -834,8 +769,10 @@ class MainWindow(QMainWindow):
         self._add_action(help_menu, "关于", self._show_about)
 
         self.project_required_actions.append(self._add_action(menubar, "自动标注", self._focus_auto_labeling_panel))
+        self.project_required_actions.append(self._add_action(menubar, "类别名映射", self._show_class_name_map_dialog))
         self.project_required_actions.append(self._add_action(menubar, "视频截帧", self._show_video_capture))
         self.project_required_actions.append(self._add_action(menubar, "格式转换", self._show_format_conversion))
+        self.project_required_actions.append(self._add_action(menubar, "管理项目", self._show_project_manager))
         self._add_action(menubar, "环境", self._show_env_check)
         self._update_project_gate()
 
@@ -923,22 +860,12 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _switch_workspace(self, index: int) -> None:
-        if index != 6 and not self._is_project_ready():
-            index = 6
-            if hasattr(self, "project_panel"):
-                self.statusBar().showMessage("请先在项目页新建/导入项目，并导入图片或视频截帧", 3500)
-        if index == 6 and not self.current_project:
-            self.workspace_stack.setCurrentIndex(6)
-            for tab_index, button in getattr(self, "workspace_tab_buttons", {}).items():
-                button.setChecked(tab_index == 6)
-            if hasattr(self, "annotation_tools_container"):
-                self.annotation_tools_container.setVisible(False)
-            self._show_launch_page()
+        # Gate: project-required workspaces need a project with images.
+        # Only annotation workspace (index 0) is always accessible.
+        if index != 0 and not self._is_project_ready():
+            self.statusBar().showMessage("请先打开图片目录或导入项目", 3500)
             return
-        self._show_workbench_page()
         self.workspace_stack.setCurrentIndex(index)
-        for action_index, action in getattr(self, "workspace_actions", {}).items():
-            action.setChecked(action_index == index)
         for tab_index, button in getattr(self, "workspace_tab_buttons", {}).items():
             button.setChecked(tab_index == index)
         if hasattr(self, "annotation_tools_container"):
@@ -947,7 +874,7 @@ class MainWindow(QMainWindow):
     def _update_project_gate(self) -> None:
         ready = self._is_project_ready()
         for index, button in getattr(self, "workspace_tab_buttons", {}).items():
-            button.setEnabled(index == 6 or ready)
+            button.setEnabled(index in (0,) or ready)
         for action in getattr(self, "project_required_actions", []):
             action.setEnabled(ready)
 
@@ -965,7 +892,6 @@ class MainWindow(QMainWindow):
             self.current_image_index = -1
             self.results_panel.set_project(None)
             self._update_project_gate()
-            self._switch_workspace(6)
             self.statusBar().showMessage("项目已关闭", 2500)
             return
 
@@ -1007,15 +933,9 @@ class MainWindow(QMainWindow):
             self._switch_workspace(0)
             self._load_current_image()
         else:
-            self._switch_workspace(6)
-            self.current_image_path = None
-            self.annot_list.refresh([])
-            self.canvas.clear_shapes()
-            self.canvas.original_image = None
-            self.canvas.display_pixmap = None
-            self.canvas.image_width = 0
-            self.canvas.image_height = 0
-            self.canvas.update()
+            self.statusBar().showMessage(
+                f"已加载项目: {project.get('name', '')} — 请导入图片开始标注", 5000
+            )
             self._update_status()
 
         self.statusBar().showMessage(
@@ -1062,10 +982,36 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _open_image_dir(self) -> None:
+        # Auto-create project if none exists (LabelImg-style: select dir = start working)
         if not self.current_project:
-            QMessageBox.warning(self, "需要项目", "请先新建或导入项目，再导入图片。")
-            self._switch_workspace(6)
+            dir_path = QFileDialog.getExistingDirectory(self, "打开图片目录")
+            if not dir_path:
+                return
+            project_root = Path(dir_path)
+            self.statusBar().showMessage("正在创建项目...", 2000)
+            try:
+                project = ProjectManager().open_project(str(project_root))
+            except Exception as exc:
+                QMessageBox.critical(self, "创建项目失败", str(exc))
+                return
+            # If selected dir has images/ subdir with content, use as-is (YOLO dataset root).
+            # Otherwise import images from the selected dir into images/.
+            images_dir = project_root / "images"
+            if not images_dir.exists() or not any(images_dir.iterdir()):
+                try:
+                    imported, skipped = ProjectManager().import_folder(project, dir_path)
+                    if imported > 0:
+                        self.statusBar().showMessage(
+                            f"已导入 {imported} 张图片" +
+                            (f"，跳过 {skipped} 张" if skipped else ""), 3500
+                        )
+                except Exception as exc:
+                    logger.warning(f"Auto-import images failed: {exc}")
+            self.current_project = project
+            self.project_panel.refresh_projects()
+            self.project_panel._select_project(project)
             return
+
         dir_path = QFileDialog.getExistingDirectory(self, "打开图片目录")
         if not dir_path:
             return
@@ -1140,8 +1086,7 @@ class MainWindow(QMainWindow):
 
     def _open_single_image(self) -> None:
         if not self.current_project:
-            QMessageBox.warning(self, "需要项目", "请先新建或导入项目，再导入图片。")
-            self._switch_workspace(6)
+            QMessageBox.information(self, "提示", "请先打开图片目录")
             return
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -1641,7 +1586,7 @@ class MainWindow(QMainWindow):
                 if current_abs and image_abs == current_abs:
                     shapes = self.canvas.get_shapes() + shapes
                 else:
-                    width, height = self._read_image_size(image_path)
+                    width, height = read_image_size(image_path)
                     if width > 0 and height > 0:
                         shapes = load_yolo_shapes(image_path, width, height, self.class_manager) + shapes
             try:
@@ -1668,12 +1613,25 @@ class MainWindow(QMainWindow):
         self.yolo_current_btn.setEnabled(True)
         self.yolo_all_btn.setEnabled(True)
         self._maybe_offer_training_after_annotation()
+        self._cleanup_yolo_label()
 
     def _on_yolo_auto_label_error(self, error_msg: str) -> None:
         self.yolo_status_label.setText("标注失败")
         self.yolo_current_btn.setEnabled(True)
         self.yolo_all_btn.setEnabled(True)
         QMessageBox.critical(self, "YOLO 自动标注失败", error_msg)
+        self._cleanup_yolo_label()
+
+    def _cleanup_yolo_label(self) -> None:
+        if self._yolo_label_thread is not None:
+            if self._yolo_label_thread.isRunning():
+                self._yolo_label_thread.quit()
+                self._yolo_label_thread.wait(3000)
+            self._yolo_label_thread.deleteLater()
+            self._yolo_label_thread = None
+        if self._yolo_label_worker is not None:
+            self._yolo_label_worker.deleteLater()
+            self._yolo_label_worker = None
 
     def _class_id_for_yolo_auto_label(self) -> Optional[int]:
         if self.yolo_model_class_check.isChecked():
@@ -1835,7 +1793,7 @@ class MainWindow(QMainWindow):
         add_btn.clicked.connect(lambda: table.insertRow(table.rowCount()))
         edit_row.addWidget(add_btn)
         remove_btn = QPushButton("删除选中")
-        remove_btn.clicked.connect(lambda: table.removeRow(table.currentRow()))
+        remove_btn.clicked.connect(lambda: table.currentRow() >= 0 and table.removeRow(table.currentRow()))
         edit_row.addWidget(remove_btn)
         edit_row.addStretch()
         layout.addLayout(edit_row)
@@ -1890,17 +1848,10 @@ class MainWindow(QMainWindow):
         else:
             QMessageBox.information(self, "导入完成", "所有模型类别名已在映射表中")
 
-    def _read_image_size(self, image_path: str) -> tuple[int, int]:
-        reader = QImageReader(image_path)
-        size = reader.size()
-        if size.isValid():
-            return size.width(), size.height()
-        return 0, 0
-
     def _image_size_for_save(self, image_path: str) -> tuple[int, int]:
         if image_path == self.current_image_path and self.canvas.image_width and self.canvas.image_height:
             return self.canvas.image_width, self.canvas.image_height
-        width, height = self._read_image_size(image_path)
+        width, height = read_image_size(image_path)
         if width <= 0 or height <= 0:
             raise ValueError(f"无法读取图片尺寸: {image_path}")
         return width, height
@@ -1914,21 +1865,9 @@ class MainWindow(QMainWindow):
         self.yolo_status_label.setText("请先加载模型")
         self.yolo_model_combo.setFocus()
 
-    def _show_yolo_tools_dialog(self) -> None:
-        self._switch_workspace(0)
-        self.yolo_model_combo.setFocus()
-        self.statusBar().showMessage("YOLO 自动标注位于顶部参数栏", 2500)
-
     # ------------------------------------------------------------------
     # LLM auto-labeling
     # ------------------------------------------------------------------
-
-        if not self.current_image_path or self.canvas.original_image is None:
-            QMessageBox.warning(self, "提示", "请先打开一张图片")
-            return None, None
-            return None, None
-
-            return
 
     def _run_llm_auto_label(self):
         if not self._is_llm_detect_project():
@@ -2042,7 +1981,7 @@ class MainWindow(QMainWindow):
         total_added = 0
         processed = 0
         for image_path, detections in results.items():
-            width, height = self._image_size_for_path(image_path)
+            width, height = self._image_size_for_save(image_path)
             if width <= 0 or height <= 0:
                 continue
             processed += 1
@@ -2250,8 +2189,7 @@ class MainWindow(QMainWindow):
 
     def _show_video_capture(self) -> None:
         if not self.current_project:
-            QMessageBox.warning(self, "需要项目", "请先新建或导入项目，再进行视频截帧。")
-            self._switch_workspace(6)
+            QMessageBox.warning(self, "需要项目", "请先用 Ctrl+O 打开图片目录，再进行视频截帧。")
             return
         try:
             from gui.video_capture_dialog import VideoCaptureDialog
@@ -2303,6 +2241,20 @@ class MainWindow(QMainWindow):
             dialog.exec()
         except Exception as exc:
             QMessageBox.critical(self, "错误", f"无法打开格式转换:\n{exc}")
+
+    def _show_project_manager(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("管理项目")
+        dialog.setMinimumSize(520, 480)
+        layout = QVBoxLayout(dialog)
+        self.project_panel.setParent(dialog)
+        self.project_panel.setVisible(True)
+        layout.addWidget(self.project_panel)
+        try:
+            dialog.exec()
+        finally:
+            self.project_panel.setParent(self)
+            self.project_panel.setVisible(False)
 
     def _show_about(self) -> None:
         QMessageBox.about(
@@ -2366,13 +2318,19 @@ class MainWindow(QMainWindow):
         if self._llm_batch_worker and self._llm_batch_worker.isRunning():
             self._llm_batch_worker.stop()
             self._llm_batch_worker.quit()
-            self._llm_batch_worker.wait(3000)
+            if not self._llm_batch_worker.wait(3000):
+                self._llm_batch_worker.terminate()
+                self._llm_batch_worker.wait(1000)
         if self._llm_worker and self._llm_worker.isRunning():
             self._llm_worker.quit()
-            self._llm_worker.wait(3000)
+            if not self._llm_worker.wait(3000):
+                self._llm_worker.terminate()
+                self._llm_worker.wait(1000)
         if self._yolo_label_thread and self._yolo_label_thread.isRunning():
             self._yolo_label_thread.quit()
-            self._yolo_label_thread.wait(3000)
+            if not self._yolo_label_thread.wait(3000):
+                self._yolo_label_thread.terminate()
+                self._yolo_label_thread.wait(1000)
         self.model_manager.clear_cache()
         logger.info("MainWindow closed")
         event.accept()
@@ -2385,19 +2343,19 @@ class MainWindow(QMainWindow):
         if key in (Qt.Key.Key_Right, Qt.Key.Key_D):
             self._next_image()
             return
-        if key in (Qt.Key.Key_V, Qt.Key.Key_1):
+        if key == Qt.Key.Key_V:
             self._set_canvas_mode(CanvasMode.EDIT)
             return
-        if key in (Qt.Key.Key_R, Qt.Key.Key_2):
+        if key == Qt.Key.Key_R:
             self._set_canvas_mode(CanvasMode.CREATE_BBOX)
             return
-        if key in (Qt.Key.Key_P, Qt.Key.Key_3):
+        if key == Qt.Key.Key_P:
             self._set_canvas_mode(CanvasMode.CREATE_POLYGON)
             return
-        if key in (Qt.Key.Key_O, Qt.Key.Key_4):
+        if key == Qt.Key.Key_O:
             self._set_canvas_mode(CanvasMode.CREATE_OBB)
             return
-        if key in (Qt.Key.Key_K, Qt.Key.Key_5):
+        if key == Qt.Key.Key_K:
             self._set_canvas_mode(CanvasMode.CREATE_KEYPOINT)
             return
         if key == Qt.Key.Key_Delete:

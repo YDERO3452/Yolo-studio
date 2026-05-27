@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -16,7 +16,6 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -88,21 +87,27 @@ class ProjectPanel(QWidget):
         self.project_combo.currentIndexChanged.connect(self._on_project_selected)
         project_form.addRow("当前项目:", self.project_combo)
 
-        project_btns = QHBoxLayout()
+        project_btns = QVBoxLayout()
+        row1 = QHBoxLayout()
         self.new_btn = QPushButton("新建")
         self.new_btn.setObjectName("PrimaryButton")
         self.new_btn.clicked.connect(self.create_project)
-        self.import_project_btn = QPushButton("导入项目")
-        self.import_project_btn.clicked.connect(self.import_project_folder)
         self.open_folder_btn = QPushButton("打开目录")
         self.open_folder_btn.clicked.connect(self.open_project_folder)
+        row1.addWidget(self.new_btn)
+        row1.addWidget(self.open_folder_btn)
+
+        row2 = QHBoxLayout()
+        self.import_project_btn = QPushButton("导入项目")
+        self.import_project_btn.clicked.connect(self.import_project_folder)
         self.delete_btn = QPushButton("删除")
         self.delete_btn.setObjectName("DangerButton")
         self.delete_btn.clicked.connect(self.delete_project)
-        project_btns.addWidget(self.new_btn)
-        project_btns.addWidget(self.import_project_btn)
-        project_btns.addWidget(self.open_folder_btn)
-        project_btns.addWidget(self.delete_btn)
+        row2.addWidget(self.import_project_btn)
+        row2.addWidget(self.delete_btn)
+
+        project_btns.addLayout(row1)
+        project_btns.addLayout(row2)
         project_form.addRow("", project_btns)
 
         self.project_status = StatusPill("未选择")
@@ -346,6 +351,14 @@ class ProjectPanel(QWidget):
         project = self._require_project()
         if not project:
             return
+        # Close old dialog to prevent leak
+        if self._video_capture_dialog is not None:
+            try:
+                self._video_capture_dialog.close()
+            except Exception:
+                # harmless: dialog already destroyed by Qt
+                pass
+            self._video_capture_dialog = None
         try:
             from gui.video_capture_dialog import VideoCaptureDialog
 
@@ -492,6 +505,12 @@ class ProjectPanel(QWidget):
         worker = getattr(self, "_env_worker", None)
         if worker is not None and worker.isRunning():
             return
+        # Disconnect old worker signal to prevent leaks
+        if worker is not None:
+            try:
+                worker.finished.disconnect(self._on_env_check_done)
+            except (TypeError, RuntimeError):
+                pass
         self.env_recheck_btn.setEnabled(False)
         self.env_summary_label.setText("正在检测 GPU、CUDA、PyTorch 和 Ultralytics...")
         self.env_install_text.setPlainText("")

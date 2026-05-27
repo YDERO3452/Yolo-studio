@@ -113,7 +113,7 @@ class FormatConverter:
                     x2 = x_center + width / 2
                     y2 = y_center + height / 2
 
-                    class_name = self.class_names[class_id] if class_id < len(self.class_names) else str(class_id)
+                    class_name = self.class_names[class_id] if 0 <= class_id < len(self.class_names) else str(class_id)
 
                     detections.append(Detection(
                         class_id=class_id,
@@ -495,8 +495,8 @@ class FormatConverter:
                     image_file = self._find_image_file_in_dir(input_file, search_dir)
                     if image_file:
                         from PIL import Image
-                        img = Image.open(image_file)
-                        img_width, img_height = img.width, img.height
+                        with Image.open(image_file) as img:
+                            img_width, img_height = img.width, img.height
                     elif input_format == 'yolo':
                         logger.warning(f"Image not found for {input_file}")
                         result.error_message = "Image not found"
@@ -510,8 +510,8 @@ class FormatConverter:
                     detections = self.voc_to_detections(str(input_file))
                     if not img_width and image_file:
                         from PIL import Image as _Img
-                        _im = _Img.open(image_file)
-                        img_width, img_height = _im.width, _im.height
+                        with _Img.open(image_file) as _im:
+                            img_width, img_height = _im.width, _im.height
                 elif input_format == 'dota':
                     detections = self.dota_to_detections(str(input_file))
                 else:
@@ -591,8 +591,13 @@ class FormatConverter:
                     coco_data = json.load(f)
 
                 images = coco_data.get('images', [])
-                annotations = coco_data.get('categories', [])
-                cat_map = {cat['id']: cat['name'] for cat in annotations}
+                categories = coco_data.get('categories', [])
+                cat_map = {cat['id']: cat['name'] for cat in categories}
+
+                # Build image_id → annotations index (avoid O(n*m) nested loop)
+                ann_by_image: dict = {}
+                for ann in coco_data.get('annotations', []):
+                    ann_by_image.setdefault(ann['image_id'], []).append(ann)
 
                 if progress_callback:
                     progress_callback(0, len(images))
@@ -603,11 +608,8 @@ class FormatConverter:
                     img_h = img_info.get('height', 0)
                     file_stem = Path(img_info.get('file_name', f'image_{img_id}')).stem
 
-                    # Gather detections for this image
                     dets = []
-                    for ann in coco_data.get('annotations', []):
-                        if ann['image_id'] != img_id:
-                            continue
+                    for ann in ann_by_image.get(img_id, []):
                         bbox = ann['bbox']
                         cat_id = ann['category_id']
                         cat_name = cat_map.get(cat_id, str(cat_id))

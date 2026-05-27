@@ -5,13 +5,12 @@ import csv
 import time
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
-    QComboBox, QSpinBox, QDoubleSpinBox, QPushButton, QLineEdit,
+    QComboBox, QDoubleSpinBox, QPushButton, QLineEdit,
     QTextEdit, QFileDialog, QCheckBox, QSplitter, QMessageBox,
     QProgressBar, QTabWidget, QSlider, QSizePolicy
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer, QMutex, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QThread, QMutex, QSize
 from PyQt6.QtGui import QImage, QPixmap, QFont, QIcon
-from pathlib import Path
 
 import cv2
 import numpy as np
@@ -252,7 +251,8 @@ class InferencePanel(QWidget):
 
     def _load_icon(self, name: str) -> QIcon:
         """Load icon from resources/icons folder."""
-        svg_path = Path(__file__).parent.parent / "resources" / "icons" / f"{name}.svg"
+        from freeze import get_resource_path
+        svg_path = get_resource_path(f"resources/icons/{name}.svg")
         if svg_path.exists():
             return QIcon(str(svg_path))
         return QIcon()
@@ -562,17 +562,19 @@ class InferencePanel(QWidget):
     def _on_slider_pressed(self):
         """User started dragging the slider — pause to avoid conflicts."""
         self._slider_pressed = True
-        if self.worker and not self.worker.is_paused():
+        self._was_playing_before_slider = self.worker and not self.worker.is_paused()
+        if self._was_playing_before_slider:
             self.worker.pause()
             self.play_pause_btn.setText("继续")
 
     def _on_slider_released(self):
-        """User released the slider — seek to the position and resume."""
+        """User released the slider — seek to the position."""
         if self.worker and self._is_video:
             target_frame = self.frame_slider.value()
             self.worker.seek_frame(target_frame)
-            self.worker.resume()
-            self.play_pause_btn.setText("暂停")
+            if self._was_playing_before_slider:
+                self.worker.resume()
+                self.play_pause_btn.setText("暂停")
         self._slider_pressed = False
 
     def _on_slider_value_changed(self, value):
@@ -833,6 +835,8 @@ class InferencePanel(QWidget):
         self.time_label.setText(f"00:00 / {int(total_s//60):02d}:{int(total_s%60):02d}")
         self.frame_label.setText(f"0 / {total_frames}")
 
+        self.stop_inference()
+        self._cleanup_worker()
         self.worker = InferenceWorker(
             self.inferencer, path, **self.get_predict_args()
         )
@@ -857,6 +861,8 @@ class InferencePanel(QWidget):
         # Hide video controls for webcam (no seeking)
         self.video_control_widget.setVisible(False)
 
+        self.stop_inference()
+        self._cleanup_worker()
         self.worker = InferenceWorker(
             self.inferencer, 0, is_webcam=True, **self.get_predict_args()
         )
@@ -867,6 +873,26 @@ class InferencePanel(QWidget):
     def stop_inference(self):
         if self.worker:
             self.worker.stop()
+
+    def _cleanup_worker(self):
+        if self.worker is not None:
+            if self.worker.isRunning():
+                self.worker.stop()
+                if not self.worker.wait(3000):
+                    self.worker.terminate()
+                    self.worker.wait(1000)
+            self.worker.deleteLater()
+            self.worker = None
+
+    def _cleanup_batch_worker(self):
+        if self.batch_worker is not None:
+            if self.batch_worker.isRunning():
+                self.batch_worker.stop()
+                if not self.batch_worker.wait(3000):
+                    self.batch_worker.terminate()
+                    self.batch_worker.wait(1000)
+            self.batch_worker.deleteLater()
+            self.batch_worker = None
 
     def on_frame_ready(self, frame: np.ndarray, info: dict):
         self.display_frame(frame)
@@ -902,6 +928,7 @@ class InferencePanel(QWidget):
         self.runtime_status_label.setText("就绪")
         self.runtime_status_label.set_variant("")
         self.play_pause_btn.setText("暂停")
+        self._cleanup_worker()
 
     def display_frame(self, frame: np.ndarray):
         """Display a frame (numpy BGR array) in the image label.
@@ -1042,6 +1069,8 @@ class InferencePanel(QWidget):
         self.batch_stop_btn.setEnabled(True)
         self.batch_export_btn.setEnabled(False)
 
+        self.stop_batch_inference()
+        self._cleanup_batch_worker()
         self.batch_worker = BatchInferenceWorker(
             self.inferencer, image_paths, output_dir, **self.get_predict_args()
         )
@@ -1075,6 +1104,7 @@ class InferencePanel(QWidget):
         self.batch_export_btn.setEnabled(True)
         self.batch_status_label.setText(f"完成! 共处理 {total} 张图片")
         self.batch_results_text.append(f"\n批量推理完成! 共处理 {total} 张图片")
+        self._cleanup_batch_worker()
 
     def export_batch_results(self):
         if not self.batch_results:

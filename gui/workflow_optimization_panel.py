@@ -2,12 +2,10 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QPushButton,
-    QProgressBar, QMessageBox, QFileDialog, QTabWidget, QTableWidget,
-    QTableWidgetItem, QComboBox, QSpinBox, QDoubleSpinBox, QCheckBox,
-    QListWidget, QListWidgetItem, QTextEdit
+    QProgressBar, QMessageBox, QFileDialog, QTabWidget, QComboBox,
+    QDoubleSpinBox, QListWidget, QTextEdit
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QThread, QObject
-from PyQt6.QtGui import QColor
+from PyQt6.QtCore import pyqtSignal, QThread
 from pathlib import Path
 from typing import Optional, List
 from loguru import logger
@@ -16,6 +14,51 @@ from core.workflow_optimizer import (
     WorkflowBatchProcessor, AnnotationValidator, DataQualityChecker, PresetManager
 )
 from core.class_manager import ClassManager
+from core.model_manager import ModelManager
+
+
+class _BatchLabelWorker(QThread):
+    """Worker thread for batch auto-labeling using ModelManager + BatchProcessor."""
+    progress = pyqtSignal(int, int)
+    finished = pyqtSignal(int, int)
+    error_msg = pyqtSignal(str)
+
+    def __init__(self, model_name, input_dir, output_dir, class_names,
+                 conf=0.25, iou=0.7, device="", parent=None):
+        super().__init__(parent)
+        self._model_name = model_name
+        self._input_dir = input_dir
+        self._output_dir = output_dir
+        self._class_names = class_names
+        self._conf = conf
+        self._iou = iou
+        self._device = device
+
+    def run(self):
+        from core.batch_processor import BatchProcessor, BatchProcessingConfig
+
+        model_mgr = ModelManager()
+        processor = BatchProcessor(model_mgr, self._class_names)
+
+        config = BatchProcessingConfig(
+            model_name=self._model_name,
+            input_dir=self._input_dir,
+            output_dir=self._output_dir,
+            conf_threshold=self._conf,
+            iou_threshold=self._iou,
+            device=self._device,
+        )
+
+        def on_progress(cur, total):
+            self.progress.emit(cur, total)
+
+        try:
+            results = processor.process_directory(config, progress_callback=on_progress)
+            ok = sum(1 for r in results if r.success)
+            ng = sum(1 for r in results if not r.success)
+            self.finished.emit(ok, ng)
+        except Exception as exc:
+            self.error_msg.emit(str(exc))
 
 
 class WorkflowOptimizationPanel(QWidget):
@@ -115,6 +158,28 @@ class WorkflowOptimizationPanel(QWidget):
         label_btn_layout.addWidget(self.label_output_btn)
 
         label_layout.addLayout(label_btn_layout)
+
+        # Model and threshold controls
+        model_row = QHBoxLayout()
+        model_row.addWidget(QLabel("模型:"))
+        self.label_model_combo = QComboBox()
+        self.label_model_combo.setEditable(True)
+        self.label_model_combo.setMinimumWidth(150)
+        self._populate_label_models()
+        model_row.addWidget(self.label_model_combo, 1)
+        model_row.addWidget(QLabel("Conf:"))
+        self.label_conf_spin = QDoubleSpinBox()
+        self.label_conf_spin.setRange(0.01, 1.0)
+        self.label_conf_spin.setValue(0.25)
+        self.label_conf_spin.setSingleStep(0.05)
+        model_row.addWidget(self.label_conf_spin)
+        model_row.addWidget(QLabel("IoU:"))
+        self.label_iou_spin = QDoubleSpinBox()
+        self.label_iou_spin.setRange(0.1, 1.0)
+        self.label_iou_spin.setValue(0.7)
+        self.label_iou_spin.setSingleStep(0.05)
+        model_row.addWidget(self.label_iou_spin)
+        label_layout.addLayout(model_row)
 
         self.label_btn = QPushButton("开始标注")
         self.label_btn.clicked.connect(self.start_batch_label)
@@ -327,30 +392,69 @@ class WorkflowOptimizationPanel(QWidget):
             self.label_output_btn.setText(f"输出: {Path(dir_path).name}")
 
     def start_batch_label(self):
-        """Start batch auto-labeling."""
+        """Start batch auto-labeling with YOLO model inference."""
         if not hasattr(self, 'label_input_dir') or not hasattr(self, 'label_output_dir'):
             QMessageBox.warning(self, "错误", "请选择输入和输出目录")
+            return
+
+        model_name = self.label_model_combo.currentText().strip()
+        if not model_name:
+            QMessageBox.warning(self, "错误", "请选择或输入模型名称")
             return
 
         self.batch_status_label.setText("标注中...")
         self.batch_progress_bar.setValue(0)
         self.label_btn.setEnabled(False)
 
+        self._label_worker = _BatchLabelWorker(
+            model_name=model_name,
+            input_dir=self.label_input_dir,
+            output_dir=self.label_output_dir,
+            class_names=self.class_manager.get_all_classes(),
+            conf=self.label_conf_spin.value(),
+            iou=self.label_iou_spin.value(),
+        )
+        self._label_worker.progress.connect(self._on_label_progress)
+        self._label_worker.finished.connect(self._on_label_finished)
+        self._label_worker.error_msg.connect(self._on_label_error)
+        self._label_worker.start()
+
+    def _on_label_progress(self, cur, total):
+        if total > 0:
+            self.batch_progress_bar.setValue(int(cur / total * 100))
+            self.batch_status_label.setText(f"标注中... {cur}/{total}")
+
+    def _on_label_finished(self, ok, ng):
+        self.batch_progress_bar.setValue(100)
+        self.batch_status_label.setText(f"完成: 成功 {ok}, 失败 {ng}")
+        self.label_btn.setEnabled(True)
+        QMessageBox.information(
+            self, "批量标注完成",
+            f"成功: {ok} 张\n失败: {ng} 张\n\n标注文件已保存到输出目录。"
+        )
+
+    def _on_label_error(self, msg):
+        self.batch_progress_bar.setValue(0)
+        self.batch_status_label.setText(f"错误: {msg}")
+        self.label_btn.setEnabled(True)
+        QMessageBox.critical(self, "标注失败", msg)
+
+    def _populate_label_models(self):
+        """Populate model combo with available models."""
         try:
-            from core.format_converter import FormatConverter
-            converter = FormatConverter(self.class_manager.get_all_classes())
-            converter.convert_folder(
-                self.label_input_dir, self.label_output_dir, "yolo", "yolo"
-            )
-            self.batch_progress_bar.setValue(100)
-            self.batch_status_label.setText("标注完成")
-            self.label_btn.setEnabled(True)
-            self.batch_processing_finished.emit({"success": True})
-            QMessageBox.information(self, "完成", "标注操作已完成")
-        except Exception as e:
-            self.batch_progress_bar.setValue(0)
-            self.batch_status_label.setText(f"标注失败: {e}")
-            self.label_btn.setEnabled(True)
+            mgr = ModelManager()
+            models = mgr.list_available_models()
+            local = [Path(m).name for m in mgr.list_local_models()]
+            for m in local:
+                if m not in models:
+                    models.append(m)
+            if models:
+                self.label_model_combo.addItems(models)
+                self.label_model_combo.setCurrentText("yolov8n.pt")
+            else:
+                self.label_model_combo.addItem("yolov8n.pt")
+        except Exception:
+            self.label_model_combo.addItem("yolov8n.pt")
 
     def select_validate_input(self):
         """Select validation input directory."""

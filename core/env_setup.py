@@ -31,7 +31,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 from urllib.request import urlopen, Request
-from urllib.error import URLError
 
 from loguru import logger
 
@@ -39,10 +38,11 @@ from loguru import logger
 # -----------------------------------------------------------------------
 # Paths
 # -----------------------------------------------------------------------
-_APP_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_DATA_DIR = _APP_DIR / "data"
+from freeze import get_app_root, get_writable_dir
+_APP_DIR = get_app_root()
+_DATA_DIR = get_writable_dir() / "data"
 _CACHE_DIR = _DATA_DIR / "cache"
-_DRIVER_MAP_LOCAL = _DATA_DIR / "driver_cuda_map.json"  # Shipped with the app, manually updateable
+_DRIVER_MAP_LOCAL = _APP_DIR / "data" / "driver_cuda_map.json"  # Shipped with the app (bundled)
 _DRIVER_MAP_CACHE = _CACHE_DIR / "driver_cuda_map_remote.json"  # Downloaded from remote
 _CACHE_TTL_SECONDS = 7 * 24 * 3600  # 7 days
 
@@ -366,6 +366,7 @@ def _has_legacy_nvidia_arch(env: "EnvInfo") -> bool:
             major, minor = gpu.compute_capability.split(".", 1)
             cc = float(f"{int(major)}.{int(minor)}")
         except Exception:
+            # harmless: malformed compute capability string — skip this GPU
             continue
         if cc < 7.5:
             return True
@@ -653,6 +654,7 @@ def _try_update_cache_async():
         t = threading.Thread(target=_update, daemon=True)
         t.start()
     except Exception:
+        # harmless: background GPU name map fetch is best-effort, non-critical
         pass
 
 
@@ -838,6 +840,7 @@ def _find_nvidia_smi_windows() -> str:
                 if p and os.path.isfile(p):
                     candidates.insert(0, p)  # highest priority
     except Exception:
+        # harmless: nvidia-smi not installed or failed to run — will use common paths
         pass
 
     # --- Common hard-coded paths across all drives ---
@@ -1044,6 +1047,7 @@ def _get_windows_drives() -> list[str]:
             if os.path.exists(drive):
                 drives.append(letter)
     except Exception:
+        # harmless: drive enumeration failed on non-Windows or permission-restricted system
         # Fallback: at least C and D
         drives = ["C", "D"]
     return drives
@@ -1080,6 +1084,7 @@ def _find_nvidia_smi_linux() -> str:
             if p and os.path.isfile(p):
                 return p
     except Exception:
+        # harmless: `where nvidia-smi` failed — nvidia-smi not on PATH or not Windows
         pass
 
     # --- Common paths ---
@@ -1112,6 +1117,7 @@ def _find_nvidia_smi_linux() -> str:
                     if candidate.exists():
                         return str(candidate)
         except Exception:
+            # harmless: filesystem scan failed (permissions, missing dirs) — fallback to empty
             pass
 
     return ""
@@ -1276,6 +1282,7 @@ def _detect_linux_nvidia(env: EnvInfo):
                     env.gpus.append(gpu)
                     env.has_nvidia_gpu = True
             except Exception:
+                # harmless: nvidia-smi XML parse failed — skip this GPU entry
                 pass
 
         version_file = Path("/proc/driver/nvidia/version")
@@ -1287,6 +1294,7 @@ def _detect_linux_nvidia(env: EnvInfo):
                     env.nvidia_driver_version = match.group(1)
                     env.nvidia_driver_installed = True
             except Exception:
+                # harmless: /proc/driver/nvidia/version unreadable — driver not installed or no NVIDIA GPU
                 pass
     except Exception as e:
         logger.debug(f"Linux NVIDIA detection failed: {e}")
@@ -1316,6 +1324,7 @@ def _detect_cuda_toolkit(env: EnvInfo):
         except (FileNotFoundError, subprocess.TimeoutExpired):
             continue
         except Exception:
+            # harmless: nvcc execution failed on this path — try next candidate
             continue
 
 
@@ -1358,6 +1367,7 @@ def _detect_ultralytics(env: EnvInfo):
     except ImportError:
         pass
     except Exception:
+        # harmless: ultralytics import failed for non-ImportError reason (e.g. broken install)
         pass
 
 
@@ -1734,6 +1744,23 @@ def format_diagnosis_summary(items: list[DiagnosisItem]) -> str:
             lines.append(f"    -> {item.action}")
         lines.append("")
     return "\n".join(lines)
+
+
+def format_diagnosis_html(items: list[DiagnosisItem]) -> str:
+    """Format diagnosis items as HTML for display in env_check_dialog."""
+    colors = {"ok": "#30D158", "warning": "#FFD60A", "error": "#FF453A", "info": "#64D2FF"}
+    parts = []
+    for item in items:
+        color = colors.get(item.level, "#8E8E93")
+        parts.append(f'<p><span style="color:{color}; font-weight:bold;">{item.title}</span></p>')
+        if item.detail:
+            for dl in item.detail.split("\n"):
+                parts.append(f'<p style="margin-left:12px; color:#98989D;">{dl}</p>')
+        if item.action:
+            parts.append(
+                f'<p style="margin-left:12px; color:#64D2FF;">→ {item.action}</p>'
+            )
+    return "\n".join(parts)
 
 
 

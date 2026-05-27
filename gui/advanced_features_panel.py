@@ -3,10 +3,9 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QPushButton,
     QFileDialog, QMessageBox, QTabWidget, QTextEdit, QComboBox,
-    QSpinBox, QDoubleSpinBox, QCheckBox, QTableWidget, QTableWidgetItem,
     QProgressBar
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QThread, QObject
+from PyQt6.QtCore import pyqtSignal, QThread
 from pathlib import Path
 from typing import Optional
 from loguru import logger
@@ -18,12 +17,10 @@ from core.advanced_features import (
 from core.class_manager import ClassManager
 
 
-class StatisticsWorker(QObject):
-    """Worker thread for statistics collection."""
+class _StatsCollectWorker(QThread):
+    """Background thread for statistics collection."""
 
-    progress = pyqtSignal(int)
-    finished = pyqtSignal(dict)
-    error = pyqtSignal(str)
+    finished = pyqtSignal(object)
 
     def __init__(self, collector, image_dir, annotation_dir, class_names):
         super().__init__()
@@ -33,18 +30,14 @@ class StatisticsWorker(QObject):
         self.class_names = class_names
 
     def run(self):
-        """Run statistics collection."""
         try:
             stats = self.collector.collect_statistics(
-                self.image_dir,
-                self.annotation_dir,
-                self.class_names
+                self.image_dir, self.annotation_dir, self.class_names
             )
-            self.progress.emit(100)
-            self.finished.emit({"statistics": stats})
+            self.finished.emit(stats)
         except Exception as e:
             logger.error(f"Statistics collection error: {e}")
-            self.error.emit(str(e))
+            self.finished.emit(None)
 
 
 class AdvancedFeaturesPanel(QWidget):
@@ -242,40 +235,53 @@ class AdvancedFeaturesPanel(QWidget):
             self.stats_input_btn.setText(f"目录: {Path(dir_path).name}")
 
     def collect_statistics(self):
-        """Collect statistics."""
+        """Collect statistics in background thread."""
         if not hasattr(self, 'stats_dir'):
             QMessageBox.warning(self, "错误", "请选择目录")
             return
 
         self.collect_stats_btn.setEnabled(False)
-        self.stats_progress.setValue(0)
+        self.stats_progress.setRange(0, 0)  # indeterminate
 
-        # Collect statistics
-        self.current_statistics = self.collector.collect_statistics(
+        self._stats_worker = _StatsCollectWorker(
+            self.collector,
             self.stats_dir,
             self.stats_dir,
-            self.class_manager.get_all_classes()
+            self.class_manager.get_all_classes(),
         )
+        self._stats_worker.finished.connect(self._on_stats_collected)
+        self._stats_worker.start()
 
-        # Display results
+    def _on_stats_collected(self, stats):
+        """Handle statistics collection result."""
+        self.stats_progress.setRange(0, 100)
+        self.stats_progress.setValue(100)
+        self.collect_stats_btn.setEnabled(True)
+
+        if stats is None:
+            QMessageBox.critical(self, "错误", "统计收集失败")
+            return
+
+        self.current_statistics = stats
+
         results_text = f"""
 统计结果:
 {'='*50}
-总图片数: {self.current_statistics.total_images}
-总标注数: {self.current_statistics.total_annotations}
-平均每张图片标注数: {self.current_statistics.avg_annotations_per_image:.2f}
-图片覆盖率: {self.current_statistics.image_coverage*100:.1f}%
+总图片数: {stats.total_images}
+总标注数: {stats.total_annotations}
+平均每张图片标注数: {stats.avg_annotations_per_image:.2f}
+图片覆盖率: {stats.image_coverage*100:.1f}%
 
 类别分布:
 {'-'*50}
 """
 
         for class_name, count in sorted(
-            self.current_statistics.class_distribution.items(),
+            stats.class_distribution.items(),
             key=lambda x: x[1],
             reverse=True
         ):
-            total = sum(self.current_statistics.class_distribution.values())
+            total = sum(stats.class_distribution.values())
             percentage = (count / total * 100) if total > 0 else 0
             results_text += f"{class_name:20s} {count:6d} ({percentage:5.1f}%)\n"
 
@@ -284,13 +290,11 @@ class AdvancedFeaturesPanel(QWidget):
 {'-'*50}
 """
 
-        for key, value in self.current_statistics.annotation_size_stats.items():
+        for key, value in stats.annotation_size_stats.items():
             results_text += f"{key:20s} {value:8.2f}\n"
 
         self.stats_results.setText(results_text)
-        self.stats_progress.setValue(100)
-        self.collect_stats_btn.setEnabled(True)
-        self.statistics_collected.emit({"statistics": self.current_statistics})
+        self.statistics_collected.emit({"statistics": stats})
 
     def generate_report(self):
         """Generate report."""

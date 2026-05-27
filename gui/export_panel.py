@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLineEdit, QTextEdit, QFileDialog,
     QComboBox, QCheckBox, QSpinBox, QMessageBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QThread
+from PyQt6.QtCore import pyqtSignal, QThread
 from PyQt6.QtGui import QFont
 
 from core.exporter import ModelExporter
@@ -115,7 +115,7 @@ class ExportPanel(QWidget):
 
         row3.addWidget(QLabel("ONNX Opset:"))
         self.opset_spin = QSpinBox()
-        self.opset_spin.setRange(7, 23)
+        self.opset_spin.setRange(0, 23)
         self.opset_spin.setSpecialValueText("自动")
         self.opset_spin.setValue(17)
         row3.addWidget(self.opset_spin)
@@ -260,12 +260,24 @@ class ExportPanel(QWidget):
         self.status_text.append(f"正在导出为 {format_key} 格式...")
         self.export_btn.setEnabled(False)
 
+        self._cleanup_worker()
         self.worker = ExportWorker(self.exporter, format_key, **kwargs)
         self.worker.finished.connect(self.on_export_finished)
         self.worker.start()
 
+    def _cleanup_worker(self):
+        if self.worker is not None:
+            if self.worker.isRunning():
+                self.worker.quit()
+                if not self.worker.wait(3000):
+                    self.worker.terminate()
+                    self.worker.wait(1000)
+            self.worker.deleteLater()
+            self.worker = None
+
     def on_export_finished(self, result: dict):
         self.export_btn.setEnabled(True)
+        self._cleanup_worker()
 
         if result.get("success"):
             path = result.get("path", "")

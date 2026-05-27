@@ -5,8 +5,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-import cv2
-import numpy as np
 from loguru import logger
 
 
@@ -59,17 +57,32 @@ class Annotation:
             corners = [(values[i], values[i + 1]) for i in range(0, 8, 2)]
             return OBBoxAnnotation(class_id, corners)
 
-        # Keypoint: cls x_c y_c w h kx1 ky1 v1 kx2 ky2 v2 ...
-        # Extra values after bbox (4) must be divisible by 3
-        if n >= 7 and (n - 4) % 3 == 0:
+        # When n%6==4 (n=10,16,22,…), both keypoint and polygon checks
+        # could match.  Use visibility values (0/1/2) as a tiebreaker:
+        # keypoint → visibility vals at indices 6,9,12,… are all in {0,1,2}.
+        may_be_kp = n >= 7 and (n - 4) % 3 == 0
+        may_be_poly = n >= 6 and n % 2 == 0
+
+        if may_be_kp and may_be_poly:
+            # Ambiguous — check whether it smells like keypoint
+            vis_ok = True
+            for i in range(6, n, 3):
+                if values[i] not in (0, 1, 2):
+                    vis_ok = False
+                    break
+            if vis_ok:
+                may_be_poly = False   # treat as keypoint
+            else:
+                may_be_kp = False     # treat as polygon
+
+        if may_be_kp:
             xc, yc, w, h = values[0], values[1], values[2], values[3]
             kps = []
             for i in range(4, n, 3):
                 kps.append((values[i], values[i + 1], int(values[i + 2])))
             return KeypointAnnotation(class_id, xc, yc, w, h, kps)
 
-        # Polygon: cls x1 y1 x2 y2 ... xN yN (N >= 3 points, even count)
-        if n >= 6 and n % 2 == 0:
+        if may_be_poly:
             points = [(values[i], values[i + 1]) for i in range(0, n, 2)]
             return PolygonAnnotation(class_id, points)
 
@@ -440,13 +453,24 @@ class AnnotationManager:
         return len(self.current_annotations)
 
     def _get_label_path(self, image_path: str) -> str:
-        img_path = Path(image_path)
-        parent = img_path.parent
-        if parent.name == "images":
-            label_dir = parent.parent / "labels"
-        else:
-            label_dir = parent / "labels"
-        return str(label_dir / (img_path.stem + ".txt"))
+        """Derive the YOLO label path from an image path.
+
+        Standard YOLO layout: images/train/img.jpg → labels/train/img.txt
+        Flat layout:        images/img.jpg       → labels/img.txt
+        Nested layout:      a/b/images/train/img.jpg → a/b/labels/train/img.txt
+        """
+        img_path = Path(image_path).resolve()
+        parts = img_path.parts
+
+        # Walk up to find the "images" ancestor, then swap it with "labels"
+        for i in range(len(parts) - 1, -1, -1):
+            if parts[i] == "images":
+                label_parts = list(parts[:i]) + ["labels"] + list(parts[i + 1:])
+                label_path = Path(*label_parts)
+                return str(label_path.with_suffix(".txt"))
+
+        # Fallback: sibling "labels" directory next to the image file
+        return str(img_path.parent / "labels" / (img_path.stem + ".txt"))
 
     def get_annotation_stats(self, dataset_dir: str) -> dict:
         dataset_path = Path(dataset_dir)
@@ -458,7 +482,7 @@ class AnnotationManager:
             "type_distribution": {},
         }
 
-        image_extensions = {".jpg", ".jpeg", ".png", ".bmp"}
+        image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
 
         for img_file in dataset_path.rglob("*"):
             if img_file.suffix.lower() in image_extensions:

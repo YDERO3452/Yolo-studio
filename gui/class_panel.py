@@ -11,8 +11,8 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QPushButton, QInputDialog, QMessageBox, QMenu, QColorDialog, QLabel
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QColor, QIcon, QPixmap, QFont
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QIcon, QPixmap
 from typing import Optional
 from loguru import logger
 
@@ -107,8 +107,6 @@ class ClassListPanel(QWidget):
 
         for i, class_name in enumerate(self.class_manager.get_all_classes()):
             color = self.class_manager.get_color(class_name)
-            # Show shortcut key for first 9 classes
-            shortcut_text = f" [{i + 1}]" if i < 9 else ""
             item = QListWidgetItem(f"{i+1}. {class_name}")
 
             # Create color icon (larger for visibility)
@@ -176,7 +174,7 @@ class ClassListPanel(QWidget):
 
     def _on_class_double_clicked(self, item: QListWidgetItem):
         """Double-click on class to rename it."""
-        class_name = item.text().split(" [")[0]  # Strip shortcut suffix
+        class_name = item.text().split(". ", 1)[1] if ". " in item.text() else item.text()
         self.rename_class(class_name)
 
     def add_class(self):

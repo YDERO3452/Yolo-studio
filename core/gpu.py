@@ -1,10 +1,7 @@
 """GPU / CUDA detection and monitoring module."""
 
-import os
 import subprocess
-import platform
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
 
 from loguru import logger
@@ -190,12 +187,8 @@ def _query_nvidia_smi() -> Optional[dict]:
                     "utilization": int(float(parts[7])),
                 })
 
-        # Get driver version
-        driver_version = ""
-        cmd2 = [nvidia_smi, "--query-gpu=driver_version", "--format=csv,noheader"]
-        proc2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=5)
-        if proc2.returncode == 0:
-            driver_version = proc2.stdout.strip().split("\n")[0].strip()
+        # Driver version already in each GPU's data from the first query
+        driver_version = gpus[0]["driver_version"] if gpus else ""
 
         return {
             "driver_version": driver_version,
