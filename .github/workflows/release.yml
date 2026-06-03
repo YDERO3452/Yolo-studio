@@ -37,8 +37,8 @@ jobs:
           pip install pyinstaller
           pip install -r requirements.txt
 
-      - name: Download font
-        run: python scripts/download_font.py
+      - name: Download font (optional)
+        run: python scripts/download_font.py || echo "Font download skipped - will use system fonts"
 
       - name: Build executable
         run: ${{ matrix.build_cmd }}

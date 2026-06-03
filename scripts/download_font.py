@@ -5,11 +5,18 @@ The font file is ~23MB and is excluded from git tracking.
 This script downloads it to the project root on first use.
 """
 
+"""Download Arial.Unicode.ttf for training plot labels.
+
+The font file is ~23MB and is excluded from git tracking.
+This script downloads it to the project root on first use.
+"""
+
 import sys
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
-FONT_URL = "https://github.com/matplotlib/matplotlib/raw/main/fonts/ttf/Arial Unicode MS.ttf"
+FONT_URL = "https://github.com/matplotlib/matplotlib/raw/main/fonts/ttf/" + urllib.parse.quote("Arial Unicode MS.ttf")
 TARGET_NAME = "Arial.Unicode.ttf"
 
 
