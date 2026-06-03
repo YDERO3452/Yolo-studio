@@ -101,12 +101,12 @@ python main.py
 
 ```text
 Yolo Studio/
-├─ core/        # 训练、推理、数据集、格式转换、配置等核心逻辑
-├─ gui/         # 主窗口、画布、面板、对话框、主题
-├─ resources/   # 图标等静态资源
-├─ models/      # 本地模型文件
-├─ configs/     # 配置文件
-└─ main.py      # 应用入口
+├─ core/          # 训练、推理、数据集、格式转换、配置等核心逻辑
+├─ gui/           # 主窗口、画布、面板、对话框、主题
+├─ tests/         # pytest 测试
+├─ configs/       # 配置文件
+├─ scripts/       # 工具脚本
+└─ main.py        # 应用入口
 ```
 
 ---
@@ -167,31 +167,27 @@ Yolo Studio/
 
 ## 模型下载
 
-由于模型文件较大，已从代码仓库中移除。请从 [Releases](https://github.com/YDERO3452/Yolo-studio/releases) 页面下载所需模型文件。
+模型文件（`.pt`）不包含在代码仓库中。首次运行时，Ultralytics 会自动下载所需模型。如需手动下载，可访问 [Ultralytics Models](https://docs.ultralytics.com/models/) 获取预训练权重。
 
-### 可用模型列表
+### 支持的模型
 
-| 模型名称 | 文件大小 | 用途 |
-|---------|---------|------|
-| yolo26n.pt | 5.4 MB | YOLO26 Nano 目标检测 |
-| yolo26s.pt | 19.9 MB | YOLO26 Small 目标检测 |
-| yolo26n-seg.pt | 6.6 MB | YOLO26 Nano 实例分割 |
-| yolo26n-pose.pt | 7.7 MB | YOLO26 Nano 姿态估计 |
-| yolo26n-obb.pt | 5.8 MB | YOLO26 Nano 旋转框检测 |
-| yolov8n.pt | 6.4 MB | YOLOv8 Nano 目标检测 |
-| yolov8m.pt | 50.9 MB | YOLOv8 Medium 目标检测 |
-
-下载后将所有 `.pt` 文件放置到项目根目录即可使用。
+| 系列 | 模型 | 用途 |
+|------|------|------|
+| YOLO26 | yolo26n/s/m/l/x.pt | 目标检测 |
+| YOLO26 | yolo26n/s-seg.pt | 实例分割 |
+| YOLO26 | yolo26n/s-pose.pt | 姿态估计 |
+| YOLO26 | yolo26n/s-obb.pt | 旋转框检测 |
+| YOLO11 | yolo11n/s/m/l/x.pt | 目标检测 |
+| YOLOv8 | yolov8n/s/m/l/x.pt | 目标检测 |
+| RT-DETR | rtdetr-l/x.pt | 实时检测 |
 
 ---
 
 ## CUDA 安装指南
 
-![CUDA安装步骤](教程/1.png)
-![CUDA安装步骤](教程/2.png)
-![CUDA安装步骤](教程/3.png)
-![CUDA安装步骤](教程/4.png)
-![CUDA安装步骤](教程/5.png)
-![CUDA安装步骤](教程/6.png)
-![CUDA安装步骤](教程/7.png)
-![CUDA安装步骤](教程/8.png)
+如需 GPU 加速训练，请确保安装：
+1. NVIDIA 驱动程序（推荐最新版本）
+2. CUDA Toolkit 11.8+ 或 12.x
+3. PyTorch with CUDA support
+
+应用内置了环境检测功能（设置 → 环境检测），可自动诊断 GPU/CUDA/PyTorch 兼容性并给出安装建议。

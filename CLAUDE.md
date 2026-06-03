@@ -10,8 +10,9 @@
 - **训练**: ultralytics (YOLO)
 - **推理**: ONNX Runtime / ultralytics
 - **LLM**: OpenAI-compatible API (Qwen-VL-Max 等)
-- **测试**: pytest (268 tests)
+- **测试**: pytest (397 tests)
 - **打包**: PyInstaller (onefile)
+- **CI**: GitHub Actions
 
 ## 项目结构
 
@@ -22,7 +23,8 @@ Yolo-studio/
 │   ├── annotation.py    # YOLO 标注解析 (BBox/OBBox/Polygon/Keypoint)
 │   ├── annotation_utils.py  # 标注统计工具
 │   ├── geometry_utils.py    # OBB 坐标转换
-│   ├── image_utils.py       # 图片尺寸读取
+│   ├── image_utils.py       # 图片尺寸读取 (PIL)
+│   ├── detection_parser.py  # YOLO 结果解析 (detect/OBB/keypoint)
 │   ├── config.py        # YAML 配置管理 (Pydantic)
 │   ├── project_manager.py   # 项目管理
 │   ├── dataset.py       # 数据集解析
@@ -32,7 +34,7 @@ Yolo-studio/
 │   ├── exporter.py      # 模型导出
 │   └── ...
 ├── gui/                 # 界面层
-│   ├── main_window.py   # 主窗口 (~1300 lines, 待拆分)
+│   ├── main_window.py   # 主窗口 (~2400 lines, 待拆分)
 │   ├── canvas.py        # 标注画布
 │   ├── training_panel.py    # 训练面板
 │   ├── inference_panel.py   # 推理面板
