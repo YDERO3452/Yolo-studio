@@ -32,15 +32,6 @@
 
 ---
 
-## 界面预览
-
-<!-- 截图放这里 -->
-<!-- ![标注工作台](docs/screenshots/annotation.png) -->
-<!-- ![训练面板](docs/screenshots/training.png) -->
-<!-- ![推理面板](docs/screenshots/inference.png) -->
-
----
-
 ## 项目简介
 
 YOLO Studio 是一个基于 PyQt6 和 Ultralytics YOLO 框架开发的桌面端应用程序，提供完整的目标检测工作流支持，包括数据标注、数据集管理、模型训练、推理测试和格式转换等功能。
