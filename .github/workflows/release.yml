@@ -1,0 +1,90 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: YoloStudio.exe
+            build_cmd: pyinstaller --onefile --windowed --name YoloStudio main.py
+          - os: ubuntu-latest
+            artifact: YoloStudio
+            build_cmd: pyinstaller --onefile --windowed --name YoloStudio main.py
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.os }})
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Download font
+        run: python scripts/download_font.py
+
+      - name: Build executable
+        run: ${{ matrix.build_cmd }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-${{ matrix.os }}
+          path: dist/${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "YOLO Studio ${{ github.ref_name }}"
+          body: |
+            ## YOLO Studio ${{ github.ref_name }}
+
+            ### 下载
+            - **Windows**: `YoloStudio.exe`
+            - **Linux**: `YoloStudio`
+
+            ### 使用说明
+            1. 下载对应平台的可执行文件
+            2. 首次运行会自动下载 YOLO 模型
+            3. 如需 GPU 加速，请确保已安装 CUDA 和对应的 PyTorch
+
+            ### 更新内容
+            <!-- 请在此处添加更新日志 -->
+          files: |
+            artifacts/YoloStudio.exe
+            artifacts/YoloStudio
+          draft: false
+          prerelease: false
