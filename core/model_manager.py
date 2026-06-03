@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from loguru import logger
 
-from core.geometry_utils import obb_xywhr_to_corners
+from core.detection_parser import parse_results
 
 try:
     from ultralytics import YOLO
@@ -184,69 +184,7 @@ class ModelManager:
                 logger.warning(f"No results from inference on: {image_path}")
                 return None
 
-            # Parse results — supports detect, OBB, and pose tasks
-            detections = []
-            for result in results:
-                names = getattr(result, 'names', {}) or {}
-
-                # --- OBB (Oriented Bounding Box) ---
-                obb = getattr(result, "obb", None)
-                if obb is not None and len(obb) > 0:
-                    for i in range(len(obb)):
-                        cls_id = int(obb.cls[i])
-                        det = {
-                            "class_id": cls_id,
-                            "class_name": names.get(cls_id),
-                            "confidence": float(obb.conf[i]),
-                            "type": "obb",
-                            "bbox": obb.xyxy[i].cpu().numpy().tolist() if obb.xyxy is not None else [],
-                        }
-                        # Convert xywhr to 4 corner points
-                        if obb.xywhr is not None and len(obb.xywhr[i]) >= 5:
-                            cx, cy, w, h, r = obb.xywhr[i].cpu().numpy().tolist()[:5]
-                            det["corners"] = obb_xywhr_to_corners(cx, cy, w, h, r)
-                        detections.append(det)
-                    continue
-
-                # --- Keypoint / Pose ---
-                keypoints = getattr(result, "keypoints", None)
-                if keypoints is not None and len(keypoints) > 0 and result.boxes is not None:
-                    for i in range(len(result.boxes)):
-                        box = result.boxes[i]
-                        cls_id = int(box.cls[0])
-                        det = {
-                            "class_id": cls_id,
-                            "class_name": names.get(cls_id),
-                            "confidence": float(box.conf[0]),
-                            "type": "keypoint",
-                            "bbox": box.xyxy[0].cpu().numpy().tolist(),
-                        }
-                        if hasattr(keypoints, "xy") and keypoints.xy is not None:
-                            kps = keypoints.xy[i].cpu().numpy()
-                            vis = None
-                            if hasattr(keypoints, "visible") and keypoints.visible is not None:
-                                vis = keypoints.visible[i].cpu().numpy()
-                            det["keypoints"] = []
-                            for ki in range(len(kps)):
-                                kx, ky = float(kps[ki][0]), float(kps[ki][1])
-                                v = int(vis[ki]) if vis is not None and ki < len(vis) else 2
-                                det["keypoints"].append((kx, ky, v))
-                        detections.append(det)
-                    continue
-
-                # --- Standard Detect (bbox) ---
-                if result.boxes is not None:
-                    for box in result.boxes:
-                        cls_id = int(box.cls[0])
-                        detection = {
-                            "bbox": box.xyxy[0].cpu().numpy().tolist(),
-                            "confidence": float(box.conf[0]),
-                            "class_id": cls_id,
-                            "class_name": names.get(cls_id),
-                            "type": "bbox",
-                        }
-                        detections.append(detection)
-
+            detections = parse_results(results)
             logger.debug(f"Found {len(detections)} detections")
             return detections
 

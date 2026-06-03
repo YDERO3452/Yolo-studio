@@ -43,7 +43,8 @@ class InferenceWorker(QThread):
         self.source = source
         self.is_webcam = is_webcam
         self.kwargs = kwargs
-        self.running = True
+        self._running = True
+        self._running_mutex = QMutex()
         self._fps_samples = []
 
         # Playback controls
@@ -55,23 +56,45 @@ class InferenceWorker(QThread):
 
     # ---- Playback control API (called from main thread) ----
 
+    def _is_running(self) -> bool:
+        """Thread-safe check if worker should keep running."""
+        self._running_mutex.lock()
+        try:
+            return self._running
+        finally:
+            self._running_mutex.unlock()
+
     def pause(self):
-        self._paused = True
+        self._pause_mutex.lock()
+        try:
+            self._paused = True
+        finally:
+            self._pause_mutex.unlock()
 
     def resume(self):
-        self._paused = False
-        # Wake up the pause wait
         self._pause_mutex.lock()
+        self._paused = False
         self._pause_mutex.unlock()
 
     def toggle_pause(self):
         """Toggle pause state. Returns True if now paused."""
-        if self._paused:
-            self.resume()
-            return False
-        else:
-            self.pause()
-            return True
+        self._pause_mutex.lock()
+        try:
+            if self._paused:
+                self._paused = False
+                return False
+            else:
+                self._paused = True
+                return True
+        finally:
+            self._pause_mutex.unlock()
+
+    def is_paused(self) -> bool:
+        self._pause_mutex.lock()
+        try:
+            return self._paused
+        finally:
+            self._pause_mutex.unlock()
 
     def set_speed(self, rate: float):
         """Set playback speed multiplier (0.25 - 4.0)."""
@@ -81,13 +104,8 @@ class InferenceWorker(QThread):
         """Request seeking to a specific frame (0-based)."""
         self._seek_frame = max(0, frame_idx)
         # If paused, wake up so seek takes effect
-        if self._paused:
-            self._paused = False
-            self._pause_mutex.lock()
-            self._pause_mutex.unlock()
-
-    def is_paused(self) -> bool:
-        return self._paused
+        if self.is_paused():
+            self.resume()
 
     # ---- Main loop ----
 
@@ -103,7 +121,7 @@ class InferenceWorker(QThread):
 
             frame_idx = 0
 
-            while cap.isOpened() and self.running:
+            while cap.isOpened() and self._is_running():
                 # --- Handle seek ---
                 if self._seek_frame >= 0:
                     target = min(self._seek_frame, self._total_frames - 1)
@@ -112,11 +130,11 @@ class InferenceWorker(QThread):
                     self._seek_frame = -1
 
                 # --- Handle pause ---
-                if self._paused:
+                if self.is_paused():
                     # Busy-wait with small sleep (responsive to resume)
-                    while self._paused and self.running:
+                    while self.is_paused() and self._is_running():
                         time.sleep(0.05)
-                    if not self.running:
+                    if not self._is_running():
                         break
 
                 # --- Read frame ---
@@ -177,13 +195,16 @@ class InferenceWorker(QThread):
 
             cap.release()
         except Exception as e:
-            print(f"Inference error: {e}")
+            from loguru import logger
+            logger.error(f"Inference worker error: {e}")
         finally:
             self.finished.emit()
 
     def stop(self):
-        self.running = False
-        self._paused = False  # Wake up if paused
+        self._running_mutex.lock()
+        self._running = False
+        self._running_mutex.unlock()
+        self.resume()  # Wake up if paused
 
 
 class BatchInferenceWorker(QThread):
@@ -198,14 +219,22 @@ class BatchInferenceWorker(QThread):
         self.image_paths = image_paths
         self.output_dir = output_dir
         self.kwargs = kwargs
-        self.running = True
+        self._running = True
+        self._running_mutex = QMutex()
+
+    def _is_running(self) -> bool:
+        self._running_mutex.lock()
+        try:
+            return self._running
+        finally:
+            self._running_mutex.unlock()
 
     def run(self):
         processed = 0
         total = len(self.image_paths)
 
         for i, img_path in enumerate(self.image_paths):
-            if not self.running:
+            if not self._is_running():
                 break
 
             try:
@@ -226,12 +255,15 @@ class BatchInferenceWorker(QThread):
                 processed += 1
 
             except Exception as e:
-                print(f"Batch inference error on {img_path}: {e}")
+                from loguru import logger
+                logger.error(f"Batch inference error on {img_path}: {e}")
 
         self.finished.emit(processed)
 
     def stop(self):
-        self.running = False
+        self._running_mutex.lock()
+        self._running = False
+        self._running_mutex.unlock()
 
 
 class InferencePanel(QWidget):
