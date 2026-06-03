@@ -12,11 +12,14 @@ This script downloads it to the project root on first use.
 """
 
 import sys
-import urllib.parse
 import urllib.request
 from pathlib import Path
 
-FONT_URL = "https://github.com/matplotlib/matplotlib/raw/main/fonts/ttf/" + urllib.parse.quote("Arial Unicode MS.ttf")
+# Multiple fallback URLs for the font
+FONT_URLS = [
+    "https://github.com/googlefonts/noto-cjk/raw/main/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf",
+    "https://raw.githubusercontent.com/matplotlib/matplotlib/main/fonts/ttf/DejaVuSans.ttf",
+]
 TARGET_NAME = "Arial.Unicode.ttf"
 
 
@@ -29,15 +32,18 @@ def download_font():
         print(f"Font already exists: {target}")
         return True
 
-    print(f"Downloading {TARGET_NAME}...")
-    try:
-        urllib.request.urlretrieve(FONT_URL, target)
-        print(f"Downloaded to: {target}")
-        return True
-    except Exception as e:
-        print(f"Download failed: {e}")
-        print("You can manually download the font and place it in the project root.")
-        return False
+    for url in FONT_URLS:
+        print(f"Trying: {url}")
+        try:
+            urllib.request.urlretrieve(url, target)
+            print(f"Downloaded to: {target}")
+            return True
+        except Exception as e:
+            print(f"  Failed: {e}")
+            continue
+
+    print("All downloads failed. You can manually place a .ttf font in the project root.")
+    return False
 
 
 if __name__ == "__main__":

@@ -44,7 +44,8 @@ jobs:
           pip install ultralytics onnx onnxruntime openai Pillow PyQt6 PyQt6-Qt6 opencv-python albumentations matplotlib pyyaml pydantic pandas loguru tqdm numpy
 
       - name: Download font (optional)
-        run: python scripts/download_font.py || echo "Font download skipped"
+        continue-on-error: true
+        run: python scripts/download_font.py
 
       - name: Build executable
         run: pyinstaller --onefile --noconfirm --name YoloStudio main.py
