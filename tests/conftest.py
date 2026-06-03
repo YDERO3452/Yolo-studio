@@ -84,6 +84,8 @@ _mock_module("matplotlib.backends.backend_agg")
 _mock_module("matplotlib.figure")
 _mock_module("sklearn")
 _mock_module("sklearn.metrics")
+_mock_module("PIL")
+_mock_module("PIL.Image")
 
 
 # -----------------------------------------------------------------------

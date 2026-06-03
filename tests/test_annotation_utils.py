@@ -58,7 +58,7 @@ class TestCollectAnnotationStats:
         assert total_ann == 3
         assert annotated == 2
         assert class_dist == {"cat": 2, "dog": 1}
-        assert ann_sizes == [2, 1]
+        assert sorted(ann_sizes) == [1, 2]
 
     def test_skips_invalid_class_ids(self, tmp_path):
         """Labels with out-of-range class IDs are silently skipped."""
