@@ -12,7 +12,32 @@
 
 **专业的 YOLO 系列模型标注与训练桌面工作台**
 
+[![Release](https://img.shields.io/github/v/release/YDERO3452/Yolo-studio?label=Latest)](https://github.com/YDERO3452/Yolo-studio/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/YDERO3452/Yolo-studio/total)](https://github.com/YDERO3452/Yolo-studio/releases/latest)
+
 </div>
+
+---
+
+## 下载安装
+
+前往 [Releases](https://github.com/YDERO3452/Yolo-studio/releases/latest) 下载最新版本：
+
+| 平台 | 文件 | 说明 |
+|------|------|------|
+| Windows | `YoloStudio.exe` | 双击运行，无需安装 |
+| Linux | `YoloStudio` | `chmod +x YoloStudio && ./YoloStudio` |
+
+> 首次运行会自动下载 YOLO 模型，如需 GPU 加速请安装 [CUDA + PyTorch](https://pytorch.org/get-started/locally/)
+
+---
+
+## 界面预览
+
+<!-- 截图放这里 -->
+<!-- ![标注工作台](docs/screenshots/annotation.png) -->
+<!-- ![训练面板](docs/screenshots/training.png) -->
+<!-- ![推理面板](docs/screenshots/inference.png) -->
 
 ---
 

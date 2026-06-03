@@ -72,6 +72,21 @@ jobs:
       - name: List artifacts
         run: ls -laR artifacts/
 
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # 获取上一个 tag
+          PREV_TAG=$(git tag --sort=-creatordate | sed -n '2p')
+          if [ -z "$PREV_TAG" ]; then
+            CHANGES=$(git log --pretty=format:"- %s (%h)" HEAD)
+          else
+            CHANGES=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..HEAD)
+          fi
+          # 写入多行 output
+          echo "changes<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -80,16 +95,24 @@ jobs:
             ## YOLO Studio ${{ github.ref_name }}
 
             ### 下载
-            - **Windows**: `YoloStudio.exe`
-            - **Linux**: `YoloStudio`
+            | 平台 | 文件 |
+            |------|------|
+            | Windows | `YoloStudio.exe` (346 MB) |
+            | Linux | `YoloStudio` (496 MB) |
 
             ### 使用说明
-            1. 下载对应平台的可执行文件
-            2. 首次运行会自动下载 YOLO 模型
-            3. 如需 GPU 加速，请确保已安装 CUDA 和对应的 PyTorch
+            **Windows**: 下载 `YoloStudio.exe`，双击运行
+
+            **Linux**:
+            ```bash
+            chmod +x YoloStudio
+            ./YoloStudio
+            ```
+
+            首次运行会自动下载 YOLO 模型，如需 GPU 加速请安装 [CUDA + PyTorch](https://pytorch.org/get-started/locally/)
 
             ### 更新内容
-            <!-- 请在此处添加更新日志 -->
+            ${{ steps.changelog.outputs.changes }}
           files: |
             artifacts/YoloStudio.exe
             artifacts/YoloStudio
