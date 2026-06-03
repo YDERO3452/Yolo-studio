@@ -30,3 +30,6 @@ build/
 dist/
 *.spec.bak
 *.zip
+
+# Large font file (download via scripts/download_font.py)
+Arial.Unicode.ttf

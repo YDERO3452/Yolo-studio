@@ -8,12 +8,9 @@ torchvision>=0.16.0
 onnx>=1.16.0
 onnxruntime>=1.18.0
 
-
-# Vision Foundation Models (Grounding DINO)
-transformers>=4.40.0
-accelerate>=0.30.0
-Pillow>=10.0.0
+# LLM Auto-labeling
 openai>=1.40.0
+Pillow>=10.0.0
 
 # GUI
 PyQt6>=6.6.0
