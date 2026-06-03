@@ -7,8 +7,9 @@ Architecture overview:
 - Result caching and optimization
 """
 
-from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
 from loguru import logger
 
 from core.model_manager import ModelManager

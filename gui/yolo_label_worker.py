@@ -1,7 +1,7 @@
 """YOLO auto-label background worker."""
 
-from PyQt6.QtCore import QObject, pyqtSignal
 from loguru import logger
+from PyQt6.QtCore import QObject, pyqtSignal
 
 from core.model_manager import ModelManager
 

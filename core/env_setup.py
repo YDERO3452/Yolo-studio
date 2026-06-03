@@ -30,15 +30,15 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-from urllib.request import urlopen, Request
+from urllib.request import Request, urlopen
 
 from loguru import logger
-
 
 # -----------------------------------------------------------------------
 # Paths
 # -----------------------------------------------------------------------
 from freeze import get_app_root, get_writable_dir
+
 _APP_DIR = get_app_root()
 _DATA_DIR = get_writable_dir() / "data"
 _CACHE_DIR = _DATA_DIR / "cache"

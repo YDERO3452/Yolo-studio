@@ -1,14 +1,13 @@
 """Workflow optimization module for batch processing and quality checks."""
 
-from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
-from collections import Counter
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import numpy as np
 from loguru import logger
 
 from core.annotation_utils import collect_annotation_stats
-
-import numpy as np
 
 
 @dataclass

@@ -1,29 +1,47 @@
 """Training configuration and monitoring panel."""
 
-import os
-import sys
 import io
+import os
 import re
 import shutil
+import sys
 import threading
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
-    QComboBox, QSpinBox, QDoubleSpinBox, QPushButton, QLineEdit,
-    QTextEdit, QProgressBar, QFileDialog, QCheckBox, QScrollArea,
-    QFormLayout, QTabWidget, QMessageBox, QSplitter, QDialog, QInputDialog
-)
-from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer
-from PyQt6.QtGui import QFont
-from loguru import logger
-
-from core.config import ConfigManager
-from core.trainer import YOLOTrainer
-from core.gpu import detect_cuda
-from gui.theme import Theme
-from gui.ui_components import StatusPill
 
 # Matplotlib integration
 import matplotlib
+from loguru import logger
+from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QSplitter,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from core.config import ConfigManager
+from core.gpu import detect_cuda
+from core.trainer import YOLOTrainer
+from gui.theme import Theme
+from gui.ui_components import StatusPill
+
 matplotlib.use('QtAgg')
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -1308,12 +1326,10 @@ class TrainingPanel(QWidget):
 
         # GPU info
         vram_gb = 0
-        is_nvidia = False
         cc = ""
         if self.gpu_detection.cuda_available and self.gpu_detection.gpus:
             gpu = self.gpu_detection.gpus[0]
             vram_gb = (gpu.vram_total_mb or 0) / 1024
-            is_nvidia = gpu.name and "nvidia" in gpu.name.lower()
             # Read compute capability if stored
             cc = getattr(gpu, "compute_capability", "")
 

@@ -1,17 +1,31 @@
 """Dataset management panel."""
 
 import os
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
-    QPushButton, QLineEdit, QTextEdit, QFileDialog,
-    QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
-    QDoubleSpinBox, QSplitter, QFormLayout, QTabWidget
-)
+
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import (
+    QDoubleSpinBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
-from core.dataset import DatasetManager
 from core.annotation import AnnotationManager
+from core.dataset import DatasetManager
 from gui.annotation_io import labels_dir_for_image_dir
 
 

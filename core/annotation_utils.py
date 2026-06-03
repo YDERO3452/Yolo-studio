@@ -1,8 +1,9 @@
 """Annotation utility functions shared across the codebase."""
 
-from pathlib import Path
-from typing import List, Counter as CounterType
 from collections import Counter
+from pathlib import Path
+from typing import Counter as CounterType
+from typing import List
 
 from loguru import logger
 

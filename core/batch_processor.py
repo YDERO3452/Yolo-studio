@@ -7,14 +7,15 @@ Architecture overview:
 - Error handling and logging
 """
 
-from pathlib import Path
-from typing import Optional, List, Dict, Any, Callable
-from dataclasses import dataclass
-from loguru import logger
 import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
-from core.model_manager import ModelManager
+from loguru import logger
+
 from core.format_converter import FormatConverter
+from core.model_manager import ModelManager
 
 
 @dataclass
@@ -222,7 +223,6 @@ class BatchProcessor:
                 height = (y2 - y1) / img_height
 
                 class_id = det["class_id"]
-                confidence = det.get("confidence", 1.0)
 
                 f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
 

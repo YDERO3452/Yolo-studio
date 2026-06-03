@@ -1,19 +1,33 @@
 """Inference panel for YOLO model prediction."""
 
-import os
 import csv
+import os
 import time
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
-    QComboBox, QDoubleSpinBox, QPushButton, QLineEdit,
-    QTextEdit, QFileDialog, QCheckBox, QSplitter, QMessageBox,
-    QProgressBar, QTabWidget, QSlider, QSizePolicy
-)
-from PyQt6.QtCore import Qt, pyqtSignal, QThread, QMutex, QSize
-from PyQt6.QtGui import QImage, QPixmap, QFont, QIcon
 
 import cv2
 import numpy as np
+from PyQt6.QtCore import QMutex, QSize, Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QFont, QIcon, QImage, QPixmap
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSizePolicy,
+    QSlider,
+    QSplitter,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from gui.ui_components import StatusPill
 

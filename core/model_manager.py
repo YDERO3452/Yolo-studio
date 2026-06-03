@@ -1,7 +1,8 @@
 """Model management module — handles YOLO model loading and inference."""
 
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from loguru import logger
 
 from core.detection_parser import parse_results

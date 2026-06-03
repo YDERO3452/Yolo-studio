@@ -7,14 +7,24 @@
 - 双击类别弹出编辑
 """
 
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
-    QPushButton, QInputDialog, QMessageBox, QMenu, QColorDialog, QLabel
-)
+from typing import Optional
+
+from loguru import logger
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QIcon, QPixmap
-from typing import Optional
-from loguru import logger
+from PyQt6.QtWidgets import (
+    QColorDialog,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from core.class_manager import ClassManager
 from gui.theme import Theme
@@ -276,7 +286,7 @@ class ClassListPanel(QWidget):
                 self.class_renamed.emit(class_name, new_name)
                 logger.info(f"Renamed class: {class_name} -> {new_name}")
             else:
-                QMessageBox.warning(self, "错误", f"无法重命名类别")
+                QMessageBox.warning(self, "错误", "无法重命名类别")
 
     def _change_color_for(self, class_name: str):
         """Change color for a specific class."""

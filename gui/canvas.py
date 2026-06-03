@@ -4,16 +4,14 @@ import copy
 from collections import deque
 from enum import Enum
 
-from PyQt6.QtWidgets import QWidget
-from PyQt6.QtCore import Qt, QRect, QPoint, QPointF, QSize, pyqtSignal
-from PyQt6.QtGui import (
-    QPainter, QPen, QColor, QPixmap, QImage, QFont, QPolygon
-)
-
 import cv2
 import numpy as np
+from PyQt6.QtCore import QPoint, QPointF, QRect, QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap, QPolygon
+from PyQt6.QtWidgets import QWidget
 
 from core.annotation import ShapeType
+
 
 class CanvasMode(str, Enum):
     EDIT = "edit"

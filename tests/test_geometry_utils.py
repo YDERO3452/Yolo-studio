@@ -1,7 +1,7 @@
 """Tests for geometry utility functions."""
 
 import math
-import pytest
+
 from core.geometry_utils import obb_xywhr_to_corners
 
 

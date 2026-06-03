@@ -8,21 +8,37 @@ import os
 import shlex
 import subprocess
 import sys
-from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QTextEdit, QProgressBar, QGroupBox,
-    QMessageBox, QScrollArea, QWidget, QFrame, QFileDialog,
-)
+
+from loguru import logger
 from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QFont
-from loguru import logger
+from PyQt6.QtWidgets import (
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from core.env_setup import (
-    detect_environment, diagnose_environment, format_diagnosis_html,
+    DiagnosisItem,
+    EnvInfo,
+    GPUVendor,
     _get_pytorch_install_cmd,
-    get_python_wheel_tags, get_pytorch_install_commands,
+    detect_environment,
+    diagnose_environment,
+    format_diagnosis_html,
+    get_python_wheel_tags,
+    get_pytorch_install_commands,
     get_pytorch_install_plan,
-    EnvInfo, DiagnosisItem, GPUVendor,
 )
 from gui.theme import build_stylesheet
 
@@ -332,10 +348,10 @@ class EnvironmentCheckDialog(QDialog):
         install_lines.append(f"(选择匹配 {torch_cmds['torchvision_pattern']} 的文件)")
         install_lines.append("")
         install_lines.append("====== pip 安装命令 ======")
-        install_lines.append(f"在线安装:")
+        install_lines.append("在线安装:")
         install_lines.append(torch_cmds["online_install"])
         install_lines.append("")
-        install_lines.append(f"离线安装 (下载后):")
+        install_lines.append("离线安装 (下载后):")
         install_lines.append(torch_cmds["install_local_dir"])
         install_lines.append("")
         install_lines.append("pip install ultralytics")
@@ -448,7 +464,6 @@ class EnvironmentCheckDialog(QDialog):
             and not self._env.pytorch_cuda_available
         )
         if is_replacing:
-            from PyQt6.QtWidgets import QMessageBox
             reply = QMessageBox.warning(
                 self, "替换 CPU 版 PyTorch",
                 f"检测到当前安装的是 CPU 版 PyTorch，将强制替换为推荐版本。\n\n"

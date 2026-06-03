@@ -1,16 +1,25 @@
 """Format conversion dialog for batch annotation format conversion."""
 
-from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QComboBox,
-    QPushButton, QFileDialog, QProgressBar, QMessageBox
-)
-from PyQt6.QtCore import pyqtSignal, QThread, QObject
 from pathlib import Path
 from typing import Optional
-from loguru import logger
 
-from core.format_converter import FormatConverter
+from loguru import logger
+from PyQt6.QtCore import QObject, QThread, pyqtSignal
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QVBoxLayout,
+)
+
 from core.class_manager import ClassManager
+from core.format_converter import FormatConverter
 from gui.theme import build_stylesheet
 
 

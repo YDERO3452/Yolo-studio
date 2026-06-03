@@ -2,7 +2,7 @@
 
 import time
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 from loguru import logger
 
@@ -119,7 +119,6 @@ class YOLOTrainer:
         if sys.platform != "win32":
             return
 
-        import torch
         import torch.multiprocessing as mp
 
         # Use file_system sharing strategy — more stable on Windows than default

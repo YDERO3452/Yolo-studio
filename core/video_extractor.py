@@ -10,11 +10,10 @@ Supports:
 
 import os
 import re
-import hashlib
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 import cv2
 import numpy as np

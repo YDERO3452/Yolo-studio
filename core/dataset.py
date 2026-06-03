@@ -27,8 +27,8 @@ YOLO automatically replaces "images" with "labels" in the path to
 find label files, so only image paths need to be specified.
 """
 
-import shutil
 import random
+import shutil
 from pathlib import Path
 from typing import Optional
 

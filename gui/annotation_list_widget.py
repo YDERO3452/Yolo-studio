@@ -1,7 +1,7 @@
 """Annotation list widget for viewing/editing shapes."""
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem, QHeaderView, QMenu
+from PyQt6.QtWidgets import QHeaderView, QMenu, QTreeWidget, QTreeWidgetItem
 
 from core.annotation import ShapeType
 from gui.annotation_io import shape_type_value

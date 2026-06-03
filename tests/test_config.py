@@ -1,7 +1,6 @@
 """Tests for core/config.py."""
 
 import os
-import tempfile
 
 import pytest
 import yaml

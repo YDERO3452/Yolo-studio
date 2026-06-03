@@ -6,11 +6,12 @@ Architecture patterns:
 - Implements color management with HSV color space
 """
 
+import colorsys
 import json
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
 from loguru import logger
-import colorsys
 
 # Built-in COCO 80-class English → Chinese mapping
 COCO_EN_ZH_MAP: Dict[str, str] = {

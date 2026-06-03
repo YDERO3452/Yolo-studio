@@ -1,8 +1,8 @@
 """Tests for core/dataset.py — DatasetManager."""
 
-import pytest
-import yaml
 from pathlib import Path
+
+import yaml
 
 from core.dataset import DatasetManager
 
@@ -78,7 +78,7 @@ class TestBuildDataYaml:
         # Create test images
         for i in range(10):
             (images_dir / f"img{i}.jpg").touch()
-            (labels_dir / f"img{i}.txt").write_text(f"0 0.5 0.5 0.2 0.3\n", encoding="utf-8")
+            (labels_dir / f"img{i}.txt").write_text("0 0.5 0.5 0.2 0.3\n", encoding="utf-8")
 
         output_yaml = str(tmp_path / "data.yaml")
         result = DatasetManager.build_data_yaml(
@@ -142,7 +142,7 @@ class TestValidateDataset:
         lbl_dir = ds_path / "labels" / "train"
         for i in range(3):
             (img_dir / f"img{i}.jpg").touch()
-            (lbl_dir / f"img{i}.txt").write_text(f"0 0.5 0.5 0.2 0.3\n", encoding="utf-8")
+            (lbl_dir / f"img{i}.txt").write_text("0 0.5 0.5 0.2 0.3\n", encoding="utf-8")
 
         issues = dm.validate_dataset(str(ds_path))
         # Should have no critical issues

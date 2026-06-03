@@ -1,14 +1,14 @@
 """Advanced features module for annotation statistics and reporting."""
 
 import json
-from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
+from typing import Any, Dict, List
+
+import numpy as np
 from loguru import logger
 
 from core.annotation_utils import collect_annotation_stats
-
-import numpy as np
 
 
 @dataclass

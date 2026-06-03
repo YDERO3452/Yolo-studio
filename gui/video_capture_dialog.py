@@ -9,22 +9,36 @@ Provides:
 """
 
 import os
-import threading
 from pathlib import Path
 
 import cv2
 import numpy as np
-from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
-    QPushButton, QComboBox, QSpinBox, QDoubleSpinBox, QCheckBox,
-    QSlider, QLineEdit, QFileDialog, QProgressBar, QListWidget,
-    QListWidgetItem, QTabWidget, QWidget, QFormLayout, QMessageBox,
-    QSplitter,
-)
-from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer, QUrl
-from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtGui import QImage, QPixmap, QFont, QKeySequence, QShortcut
 from loguru import logger
+from PyQt6.QtCore import Qt, QThread, QTimer, QUrl, pyqtSignal
+from PyQt6.QtGui import QDesktopServices, QImage, QKeySequence, QPixmap, QShortcut
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSlider,
+    QSpinBox,
+    QSplitter,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from core.video_extractor import VideoFrameExtractor
 from gui.theme import Theme, build_stylesheet
@@ -548,7 +562,7 @@ class VideoCaptureDialog(QDialog):
 
     def _on_download_error(self, msg: str):
         self.download_btn.setEnabled(True)
-        self.info_label.setText(f"下载失败")
+        self.info_label.setText("下载失败")
         QMessageBox.critical(self, "下载失败", msg)
 
     # ------------------------------------------------------------------
@@ -720,7 +734,6 @@ class VideoCaptureDialog(QDialog):
 
     def _on_mode_changed(self, index: int):
         """Show/hide relevant settings based on mode."""
-        is_interval = index in (0, 1)  # time or frame interval
         is_time = index == 0
         is_frame = index == 1
         is_scene = index == 2

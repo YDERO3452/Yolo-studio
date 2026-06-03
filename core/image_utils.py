@@ -1,6 +1,5 @@
 """Image utility functions — pure helpers with no UI dependencies."""
 
-from pathlib import Path
 
 from PIL import Image
 

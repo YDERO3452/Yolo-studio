@@ -1,16 +1,16 @@
 """LLM-based auto-labeling via OpenAI-compatible API."""
 
+import base64
 import json
 import re
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
 
-import base64
 from loguru import logger
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from freeze import get_writable_dir, get_resource_path
+from freeze import get_resource_path, get_writable_dir
 
 # Writable config path (user's saved settings)
 LLM_CONFIG_PATH = get_writable_dir() / "config" / "llm_config.json"

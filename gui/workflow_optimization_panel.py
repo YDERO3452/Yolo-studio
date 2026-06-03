@@ -1,20 +1,28 @@
 """Workflow optimization panel for batch processing and quality checks."""
 
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QPushButton,
-    QProgressBar, QMessageBox, QFileDialog, QTabWidget, QComboBox,
-    QDoubleSpinBox, QListWidget, QTextEdit
-)
-from PyQt6.QtCore import pyqtSignal, QThread
 from pathlib import Path
-from typing import Optional, List
-from loguru import logger
 
-from core.workflow_optimizer import (
-    WorkflowBatchProcessor, AnnotationValidator, DataQualityChecker, PresetManager
+from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
+
 from core.class_manager import ClassManager
 from core.model_manager import ModelManager
+from core.workflow_optimizer import AnnotationValidator, DataQualityChecker, PresetManager, WorkflowBatchProcessor
 
 
 class _BatchLabelWorker(QThread):
@@ -35,7 +43,7 @@ class _BatchLabelWorker(QThread):
         self._device = device
 
     def run(self):
-        from core.batch_processor import BatchProcessor, BatchProcessingConfig
+        from core.batch_processor import BatchProcessingConfig, BatchProcessor
 
         model_mgr = ModelManager()
         processor = BatchProcessor(model_mgr, self._class_names)
@@ -479,7 +487,7 @@ class WorkflowOptimizationPanel(QWidget):
         )
 
         # Display results
-        results_text = f"验证结果:\n"
+        results_text = "验证结果:\n"
         results_text += f"总图片数: {result['total_images']}\n"
         results_text += f"已标注: {result['annotated_images']}\n"
         results_text += f"缺少标注: {len(result['missing_annotations'])}\n"
@@ -518,7 +526,7 @@ class WorkflowOptimizationPanel(QWidget):
         )
 
         # Display results
-        results_text = f"质量检查结果:\n"
+        results_text = "质量检查结果:\n"
         results_text += f"总图片数: {metrics.total_images}\n"
         results_text += f"总标注数: {metrics.total_annotations}\n"
         results_text += f"平均每张图片标注数: {metrics.avg_annotations_per_image:.2f}\n"
@@ -529,7 +537,7 @@ class WorkflowOptimizationPanel(QWidget):
             results_text += f"  {class_name}: {count}\n"
 
         if metrics.annotation_size_stats:
-            results_text += f"\n标注大小统计:\n"
+            results_text += "\n标注大小统计:\n"
             results_text += f"  最小: {metrics.annotation_size_stats['min']}\n"
             results_text += f"  最大: {metrics.annotation_size_stats['max']}\n"
             results_text += f"  平均: {metrics.annotation_size_stats['mean']:.2f}\n"

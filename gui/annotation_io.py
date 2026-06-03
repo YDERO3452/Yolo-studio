@@ -28,7 +28,6 @@ from typing import Any, Optional
 
 from core.annotation import Annotation, ShapeType
 
-
 # ------------------------------------------------------------------
 # Path helpers
 # ------------------------------------------------------------------

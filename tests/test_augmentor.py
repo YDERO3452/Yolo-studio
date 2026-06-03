@@ -1,6 +1,5 @@
 """Tests for core/augmentor.py — DataAugmentor."""
 
-import pytest
 import numpy as np
 
 from core.augmentor import DataAugmentor

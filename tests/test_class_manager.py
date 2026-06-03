@@ -3,9 +3,7 @@
 import json
 from pathlib import Path
 
-import pytest
-
-from core.class_manager import COCO_EN_ZH_MAP, ClassManager
+from core.class_manager import ClassManager
 
 
 class TestClassManagerBasics:

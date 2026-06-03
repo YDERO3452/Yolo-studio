@@ -1,18 +1,29 @@
 """Advanced features panel for statistics and reporting."""
 
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QPushButton,
-    QFileDialog, QMessageBox, QTabWidget, QTextEdit, QComboBox,
-    QProgressBar
-)
-from PyQt6.QtCore import pyqtSignal, QThread
 from pathlib import Path
-from typing import Optional
+
 from loguru import logger
+from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from core.advanced_features import (
-    AnnotationStatisticsCollector, ReportGenerator,
-    DataAugmentationHelper, ModelFineTuningHelper
+    AnnotationStatisticsCollector,
+    DataAugmentationHelper,
+    ModelFineTuningHelper,
+    ReportGenerator,
 )
 from core.class_manager import ClassManager
 

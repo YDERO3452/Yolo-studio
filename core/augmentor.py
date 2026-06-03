@@ -1,11 +1,10 @@
 """Data augmentation module using Albumentations."""
 
 import os
+from pathlib import Path
+
 import cv2
 import numpy as np
-from pathlib import Path
-from typing import Optional
-
 from loguru import logger
 
 
@@ -15,7 +14,7 @@ class DataAugmentor:
     def __init__(self):
         self.transform = None
 
-    def build_transform(self, config=None) -> "albumentations.Compose":
+    def build_transform(self, config=None):  # returns albumentations.Compose
         """Build an Albumentations transform pipeline."""
         import albumentations as A
 

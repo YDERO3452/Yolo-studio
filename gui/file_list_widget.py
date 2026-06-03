@@ -3,8 +3,8 @@
 import os
 from typing import List
 
-from PyQt6.QtCore import Qt, QSize, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QPixmap, QIcon
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import QListWidget, QListWidgetItem
 
 from gui.annotation_io import label_path_for_image

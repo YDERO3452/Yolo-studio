@@ -1,7 +1,6 @@
 """Tests for core/project_manager.py — ProjectManager."""
 
 import json
-import pytest
 from pathlib import Path
 
 from core.project_manager import ProjectManager

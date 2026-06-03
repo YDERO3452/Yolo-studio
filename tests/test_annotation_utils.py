@@ -1,6 +1,5 @@
 """Tests for annotation utility functions."""
 
-import pytest
 from core.annotation_utils import collect_annotation_stats
 
 

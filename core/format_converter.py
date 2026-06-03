@@ -7,16 +7,15 @@ Architecture overview:
 - Support for multiple annotation formats
 """
 
-import os
 import json
-import xml.etree.ElementTree as ET
-from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple, Callable
-from dataclasses import dataclass
-from loguru import logger
+import os
 import time
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import numpy as np
+from loguru import logger
 
 
 @dataclass

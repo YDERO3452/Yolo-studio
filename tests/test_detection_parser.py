@@ -1,7 +1,7 @@
 """Tests for core/detection_parser.py — parse_results."""
 
-import pytest
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock
+
 import numpy as np
 
 from core.detection_parser import parse_results

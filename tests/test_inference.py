@@ -1,8 +1,9 @@
 """Tests for core/inference.py — YOLOInference."""
 
-import pytest
 from unittest.mock import MagicMock, patch
+
 import numpy as np
+import pytest
 
 from core.inference import YOLOInference
 

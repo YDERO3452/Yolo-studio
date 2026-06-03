@@ -1,11 +1,8 @@
 """Tests for TrainingPanel dataset validation and helpers."""
 
-import os
-import tempfile
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock
 
 import pytest
-
 
 # -----------------------------------------------------------------------
 # Helpers

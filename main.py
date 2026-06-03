@@ -3,9 +3,8 @@
 提供完整的 YOLO 标注工具应用入口。
 """
 
-import sys
-import os
 import faulthandler
+import sys
 import traceback
 from pathlib import Path
 
@@ -20,10 +19,10 @@ sys.path.insert(0, str(project_root))
 _fault_log = open(project_root / "logs" / "crash.log", "w", encoding="utf-8")
 faulthandler.enable(file=_fault_log, all_threads=True)
 
-from PyQt6.QtWidgets import QApplication
-from loguru import logger
+from loguru import logger  # noqa: E402
+from PyQt6.QtWidgets import QApplication  # noqa: E402
 
-from gui.main_window import MainWindow
+from gui.main_window import MainWindow  # noqa: E402
 
 
 def global_exception_hook(exc_type, exc_value, exc_tb):

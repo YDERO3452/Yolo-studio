@@ -1,6 +1,5 @@
 """Tests for core/annotation.py."""
 
-import os
 
 import pytest
 

@@ -1,6 +1,5 @@
 """Tests for core/exporter.py — ModelExporter."""
 
-import pytest
 
 from core.exporter import ModelExporter
 
@@ -60,15 +59,12 @@ class TestExportValidation:
         exporter = ModelExporter("model.pt")
         called_with = {}
 
-        # Mock self.export to capture calls
-        original_export = exporter.export
-
         def mock_export(**kwargs):
             called_with.update(kwargs)
             return {"success": True, "path": "output.onnx"}
 
         exporter.export = mock_export
-        result = exporter.export_onnx(imgsz=640, simplify=True)
+        exporter.export_onnx(imgsz=640, simplify=True)
         assert called_with["format"] == "onnx"
         assert called_with["imgsz"] == 640
         assert called_with["simplify"] is True

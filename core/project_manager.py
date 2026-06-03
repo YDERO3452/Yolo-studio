@@ -9,7 +9,6 @@ Ultralytics directly.
 from __future__ import annotations
 
 import json
-import os
 import re
 import shutil
 import xml.etree.ElementTree as ET
@@ -25,7 +24,6 @@ from loguru import logger
 from core.class_manager import ClassManager
 from core.dataset import DatasetManager
 from core.video_extractor import VideoFrameExtractor
-
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv"}

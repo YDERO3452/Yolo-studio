@@ -1,9 +1,6 @@
 """Tests for core/env_setup.py — pure logic only, no hardware required."""
 
-import platform
 import sys
-
-import pytest
 
 from core.env_setup import (
     EnvInfo,
@@ -15,10 +12,9 @@ from core.env_setup import (
     _lookup_compute_capability,
     _parse_driver_version,
     _parse_version_float,
-    get_pytorch_install_plan,
     get_python_wheel_tags,
+    get_pytorch_install_plan,
 )
-
 
 # ---------------------------------------------------------------------------
 # _parse_version_float

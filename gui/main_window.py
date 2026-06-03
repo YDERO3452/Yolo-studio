@@ -12,6 +12,7 @@ import traceback
 from pathlib import Path
 from typing import List, Optional
 
+from loguru import logger
 from PyQt6.QtCore import QEvent, QSize, Qt, QThread
 from PyQt6.QtGui import QAction, QFont, QIcon, QKeySequence, QPainter, QPixmap
 from PyQt6.QtWidgets import (
@@ -45,7 +46,6 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from loguru import logger
 
 from core.annotation import ShapeType
 from core.class_manager import ClassManager
@@ -61,21 +61,21 @@ from gui.annotation_io import (
     load_yolo_shapes,
     save_yolo_shapes,
 )
+from gui.annotation_list_widget import AnnotationListWidget
 from gui.canvas import AnnotationCanvas, CanvasMode
 from gui.class_panel import ClassListPanel
 from gui.dataset_panel import DatasetPanel
 from gui.export_panel import ExportPanel
+from gui.file_list_widget import FileListWidget
 from gui.inference_panel import InferencePanel
+from gui.llm_handler import LLMBatchInferenceWorker, LLMInferenceWorker, load_llm_config, save_llm_config
 from gui.project_panel import ProjectPanel
 from gui.theme import Theme, build_stylesheet
 from gui.training_panel import TrainingPanel
 from gui.training_results_panel import TrainingResultsPanel
 from gui.ui_components import StatusPill
 from gui.workflow_optimization_panel import WorkflowOptimizationPanel
-from gui.llm_handler import LLMBatchInferenceWorker, LLMInferenceWorker, load_llm_config, save_llm_config
 from gui.yolo_label_worker import YOLOAutoLabelWorker
-from gui.file_list_widget import FileListWidget
-from gui.annotation_list_widget import AnnotationListWidget
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
 
@@ -341,8 +341,8 @@ class MainWindow(QMainWindow):
         if svg_path.exists():
             svg_data = svg_path.read_text(encoding="utf-8")
             svg_data = svg_data.replace("currentColor", Theme.TEXT)
-            from PyQt6.QtSvg import QSvgRenderer
             from PyQt6.QtCore import QByteArray
+            from PyQt6.QtSvg import QSvgRenderer
             renderer = QSvgRenderer(QByteArray(svg_data.encode()))
             pixmap = QPixmap(24, 24)
             pixmap.fill(Qt.GlobalColor.transparent)
@@ -1747,7 +1747,7 @@ class MainWindow(QMainWindow):
 
     def _show_class_name_map_dialog(self) -> None:
         """Show dialog to edit model class name → project class name mapping."""
-        from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QDialogButtonBox, QHeaderView
+        from PyQt6.QtWidgets import QDialogButtonBox, QTableWidget, QTableWidgetItem
 
         dlg = QDialog(self)
         dlg.setWindowTitle("类别名映射表 (模型英文名 → 项目中文名)")
@@ -1819,10 +1819,11 @@ class MainWindow(QMainWindow):
             self.class_manager._save_name_map()
             logger.info(f"Updated name map with {len(new_map)} entries")
 
-    def _import_model_names_to_map(self, model_names: dict, table: "QTableWidget") -> None:
+    def _import_model_names_to_map(self, model_names: dict, table) -> None:
         """Import class names from the current model into the mapping table."""
-        from core.class_manager import COCO_EN_ZH_MAP
         from PyQt6.QtWidgets import QTableWidgetItem
+
+        from core.class_manager import COCO_EN_ZH_MAP
 
         existing = set()
         for row in range(table.rowCount()):
@@ -2090,7 +2091,7 @@ class MainWindow(QMainWindow):
             "DeepSeek": ("https://api.deepseek.com/v1", "deepseek-chat"),
             "Ollama (本地)": ("http://localhost:11434/v1", "llava"),
         }
-        
+
         # Detect current preset
         current_base = llm_config.get("base_url", "")
         current_model = llm_config.get("model_name", "")
@@ -2100,7 +2101,7 @@ class MainWindow(QMainWindow):
                 selected_preset = name
                 break
         preset_combo.setCurrentText(selected_preset)
-        
+
         preset_row.addWidget(preset_label)
         preset_row.addWidget(preset_combo)
         preset_row.addStretch()
@@ -2123,7 +2124,7 @@ class MainWindow(QMainWindow):
                 base, model = preset_map[text]
                 base_url_edit.setText(base)
                 model_name_edit.setText(model)
-        
+
         preset_combo.currentIndexChanged.connect(on_preset_changed)
 
         sys_prompt_edit = QTextEdit()
