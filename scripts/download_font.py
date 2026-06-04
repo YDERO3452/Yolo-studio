@@ -5,12 +5,6 @@ The font file is ~23MB and is excluded from git tracking.
 This script downloads it to the project root on first use.
 """
 
-"""Download Arial.Unicode.ttf for training plot labels.
-
-The font file is ~23MB and is excluded from git tracking.
-This script downloads it to the project root on first use.
-"""
-
 import sys
 import urllib.request
 from pathlib import Path
