@@ -28,7 +28,20 @@ if Path("Arial.Unicode.ttf").exists():
 # 这些模块在代码中动态 import (非顶层)，PyInstaller 分析不到
 
 _hidden = [
-    "PyQt6.QtSvg",          # main_window._tool_icon() 中延迟导入
+    # Qt 插件
+    "PyQt6.QtSvg",              # main_window._tool_icon() 中延迟导入
+
+    # 动态对话框 (通过菜单触发，非顶层 import)
+    "gui.env_check_dialog",     # 环境检测 → "环境" 菜单
+    "gui.video_capture_dialog", # 视频截帧 → "视频截帧" 菜单
+    "gui.format_conversion_dialog",  # 格式转换 → "格式转换" 菜单
+
+    # 工作流优化面板中动态导入的 core 模块
+    "core.batch_processor",
+    "core.format_converter",
+
+    # cv2 在部分模块中动态引用，显式声明以防原生库缺失
+    "cv2",
 ]
 
 # ── Analysis ──────────────────────────────────────────────
