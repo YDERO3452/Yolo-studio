@@ -48,7 +48,7 @@ jobs:
         run: python scripts/download_font.py
 
       - name: Build executable
-        run: pyinstaller --onefile --noconfirm --name YoloStudio main.py
+        run: pyinstaller YoloStudio.spec
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
