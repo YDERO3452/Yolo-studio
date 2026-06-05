@@ -49,6 +49,7 @@ class ExportPanel(QWidget):
         super().__init__(parent)
         self.config = config_manager
         self.exporter = None
+        self.worker = None
         self.init_ui()
 
     def init_ui(self):
