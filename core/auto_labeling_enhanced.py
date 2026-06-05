@@ -237,18 +237,20 @@ class AutoLabelingEngine:
 
         for det2 in detections2:
             is_duplicate = False
+            replacement_idx = -1
 
-            for det1 in merged:
+            for i, det1 in enumerate(merged):
                 iou = self._calculate_iou(det1["bbox"], det2["bbox"])
                 if iou > iou_threshold:
                     is_duplicate = True
                     # Keep the one with higher confidence
                     if det2.get("confidence", 0) > det1.get("confidence", 0):
-                        merged.remove(det1)
-                        merged.append(det2)
+                        replacement_idx = i
                     break
 
-            if not is_duplicate:
+            if replacement_idx >= 0:
+                merged[replacement_idx] = det2
+            elif not is_duplicate:
                 merged.append(det2)
 
         return merged

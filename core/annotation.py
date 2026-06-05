@@ -501,6 +501,7 @@ class AnnotationManager:
                                     type_name = ann.shape_type.value
                                     stats["type_distribution"][type_name] = stats["type_distribution"].get(type_name, 0) + 1
                                 except ValueError:
+                                    # harmless: malformed annotation line, skip
                                     pass
 
         return stats

@@ -2,6 +2,7 @@
 
 
 from PIL import Image
+from loguru import logger
 
 
 def read_image_size(image_path: str) -> tuple[int, int]:
@@ -14,4 +15,5 @@ def read_image_size(image_path: str) -> tuple[int, int]:
     with Image.open(image_path) as img:
       return img.size
   except Exception:
+    logger.debug(f"Failed to read image size for: {image_path}")
     return 0, 0

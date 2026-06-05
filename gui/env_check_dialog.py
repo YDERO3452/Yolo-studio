@@ -411,8 +411,8 @@ class EnvironmentCheckDialog(QDialog):
         """Open a URL in the system browser."""
         if not url:
             return
+        import webbrowser
         try:
-            import webbrowser
             webbrowser.open(url)
         except Exception:
             pass  # harmless: browser may not be available or URL fails to open

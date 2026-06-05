@@ -501,6 +501,12 @@ class FormatConverter:
                         result.error_message = "Image not found"
                         results.append(result)
                         continue
+                    elif image_file is None:
+                        # Image required for dimension-dependent conversion (DOTA→YOLO, VOC→YOLO, etc.)
+                        logger.warning(f"Image not found for {input_file}")
+                        result.error_message = "Image not found"
+                        results.append(result)
+                        continue
 
                 # Load detections
                 if input_format == 'yolo':
@@ -528,7 +534,8 @@ class FormatConverter:
                         f.write(content)
                 elif output_format == 'voc':
                     output_file = output_file.with_suffix('.xml')
-                    content = self.detections_to_voc(detections, str(input_file), img_width, img_height)
+                    voc_image_path = str(image_file) if image_file else str(input_file.with_suffix('.jpg'))
+                    content = self.detections_to_voc(detections, voc_image_path, img_width, img_height)
                     with open(output_file, 'w', encoding='utf-8') as f:
                         f.write(content)
                 elif output_format == 'dota':
@@ -627,7 +634,8 @@ class FormatConverter:
                         content = self.detections_to_yolo(dets, img_w, img_h)
                     elif output_format == 'voc':
                         output_file = output_file.with_suffix('.xml')
-                        content = self.detections_to_voc(dets, str(output_file), img_w, img_h)
+                        voc_img_name = img_info.get('file_name', f'image_{img_id}.jpg')
+                        content = self.detections_to_voc(dets, voc_img_name, img_w, img_h)
                     elif output_format == 'dota':
                         output_file = output_file.with_suffix('.txt')
                         content = self.detections_to_dota(dets)
@@ -686,8 +694,8 @@ class FormatConverter:
             image_file = self._find_image_file_in_dir(input_file, search_dir)
             if image_file:
                 from PIL import Image
-                img = Image.open(image_file)
-                img_width, img_height = img.width, img.height
+                with Image.open(image_file) as img:
+                    img_width, img_height = img.width, img.height
 
             img_id = i + 1
             all_images.append({

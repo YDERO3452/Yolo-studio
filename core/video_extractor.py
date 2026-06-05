@@ -192,6 +192,45 @@ class VideoFrameExtractor:
         logger.info(f"Extracted {len(saved_paths)} frames to {output_dir}")
         return saved_paths
 
+    def extract_by_seconds(
+        self,
+        output_dir: str,
+        every_seconds: float = 1.0,
+        dedup: bool = True,
+        dedup_threshold: int = 8,
+        max_frames: int = 0,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+    ) -> list[str]:
+        """Extract frames at regular time intervals.
+
+        Convenience wrapper around extract_auto that converts a time interval
+        (in seconds) to a frame step count using the video's FPS.
+
+        Args:
+            output_dir: Directory to save extracted frames.
+            every_seconds: Extract one frame every N seconds (e.g. 1.0 = every second).
+            dedup: Whether to skip near-duplicate frames.
+            dedup_threshold: Hamming distance threshold for perceptual hash dedup.
+            max_frames: Maximum number of frames to extract. 0 = no limit.
+            progress_callback: Called with (current_frame, total_frames).
+
+        Returns:
+            List of saved image file paths.
+        """
+        if self.fps <= 0:
+            logger.error("Cannot extract by seconds: invalid FPS")
+            return []
+        step = max(1, int(self.fps * every_seconds))
+        return self.extract_auto(
+            output_dir,
+            mode="interval",
+            interval_frames=step,
+            dedup=dedup,
+            dedup_threshold=dedup_threshold,
+            max_frames=max_frames,
+            progress_callback=progress_callback,
+        )
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

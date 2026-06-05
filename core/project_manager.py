@@ -596,7 +596,8 @@ class ProjectManager:
             return 0, 0
         try:
             return int(size.findtext("width", "0")), int(size.findtext("height", "0"))
-        except Exception:
+        except (TypeError, ValueError):
+            # harmless: malformed XML size element — fall back to (0, 0)
             return 0, 0
 
     @staticmethod

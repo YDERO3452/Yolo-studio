@@ -101,7 +101,7 @@ class _AutoExtractWorker(QThread):
             # Re-open the video in this thread (cv2 VideoCapture is not thread-safe)
             self.extractor.open(self.extractor.video_path)
 
-            if self.mode == "interval" and self.interval_seconds > 0:
+            if self.mode == "time":
                 paths = self.extractor.extract_by_seconds(
                     self.output_dir,
                     every_seconds=self.interval_seconds,
@@ -762,7 +762,7 @@ class VideoCaptureDialog(QDialog):
             return
 
         output_dir = self._get_output_dir()
-        mode_map = {0: "interval", 1: "interval", 2: "scene"}
+        mode_map = {0: "time", 1: "interval", 2: "scene"}
         mode = mode_map.get(self.mode_combo.currentIndex(), "interval")
 
         self._stop_playback()

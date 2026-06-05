@@ -204,7 +204,7 @@ class LLMInferenceWorker(QThread):
                 return ""
             try:
                 parsed = json.loads(text)
-            except Exception:
+            except json.JSONDecodeError:
                 return text
             extracted = cls._extract_text_content(parsed)
             return extracted or text

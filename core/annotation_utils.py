@@ -74,6 +74,7 @@ def collect_annotation_stats(image_dir: str, annotation_dir: str,
                             if class_id < len(class_names):
                                 class_counts[class_names[class_id]] += 1
                         except ValueError:
+                            # harmless: non-integer class ID, skip line
                             pass
 
         except Exception as e:

@@ -462,6 +462,7 @@ class WorkflowOptimizationPanel(QWidget):
             else:
                 self.label_model_combo.addItem("yolov8n.pt")
         except Exception:
+            logger.warning("Failed to enumerate YOLO models, falling back to default")
             self.label_model_combo.addItem("yolov8n.pt")
 
     def select_validate_input(self):

@@ -154,7 +154,8 @@ class _StreamTee:
         if not isinstance(s, str):
             try:
                 s = str(s)
-            except Exception:
+            except TypeError:
+                # harmless: unrepresentable object, skip
                 return 0
         with self._lock:
             self._original.write(s)
@@ -1211,6 +1212,7 @@ class TrainingPanel(QWidget):
                                         invalid_count += 1
                                         break
                     except Exception:
+                        # harmless: file I/O or encoding error, treat as invalid
                         invalid_count += 1
 
                 if invalid_count > 0:

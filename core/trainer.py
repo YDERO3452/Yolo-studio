@@ -75,8 +75,18 @@ class YOLOTrainer:
         return self.training_thread
 
     def stop_training(self):
-        """Request training stop."""
+        """Request training stop.
+
+        Sets our internal flag (for UI polling via trainer.is_training) and
+        also signals the Ultralytics internal trainer to stop the current epoch.
+        """
         self.is_training = False
+        # Signal Ultralytics internal trainer to stop
+        if self.model and hasattr(self.model, 'trainer') and self.model.trainer:
+            try:
+                self.model.trainer.stop_training = True
+            except Exception:
+                pass  # harmless: best-effort, ultralytics API may vary
         logger.info("Training stop requested")
 
     def _build_train_args(self, data_yaml: str, **kwargs) -> dict:

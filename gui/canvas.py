@@ -159,6 +159,11 @@ class AnnotationCanvas(QWidget):
             # harmless: numpy fallback for paths with non-ASCII characters
             self.original_image = cv2.imread(image_path)
 
+        # cv2.imdecode returns None on decode failure without raising —
+        # retry with cv2.imread which may handle the file differently
+        if self.original_image is None:
+            self.original_image = cv2.imread(image_path)
+
         if self.original_image is None:
             return False
         self.original_image = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB)
