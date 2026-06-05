@@ -2189,14 +2189,20 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "错误", f"无法打开环境检测:\n{exc}")
 
     def _show_video_capture(self) -> None:
-        if not self.current_project:
-            QMessageBox.warning(self, "需要项目", "请先用 Ctrl+O 打开图片目录，再进行视频截帧。")
-            return
+        """打开视频截帧对话框。
+
+        无论当前是否有项目都可以使用——没有项目时截帧图片会保存到
+        临时目录，"加载到标注"时自动创建项目。
+        """
         try:
             from gui.video_capture_dialog import VideoCaptureDialog
 
             dialog = VideoCaptureDialog(self)
-            output_dir = Path(self.current_project["root"]) / "images" / "video_frames"
+            if self.current_project:
+                output_dir = Path(self.current_project["root"]) / "images" / "video_frames"
+            else:
+                # 没有项目时输出到项目目录下的临时位置
+                output_dir = Path("data") / "video_frames"
             output_dir.mkdir(parents=True, exist_ok=True)
             dialog.output_edit.setText(str(output_dir))
             dialog.frames_captured.connect(self._load_captured_frames)
@@ -2214,9 +2220,15 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "提示", "没有可加载的截帧图片")
             return
 
+        # 没有项目时自动创建一个
         if not self.current_project:
-            QMessageBox.warning(self, "需要项目", "请先新建或导入项目")
-            self._switch_workspace(6)
+            from core.project_manager import ProjectManager as _PM
+            pm = _PM()
+            project = pm.create_project(str(Path("data").resolve()), "视频截帧项目")
+            pm.import_images(project, valid_paths)
+            self.current_project = pm.open_project(project["root"])
+            self._on_project_opened(self.current_project)
+            self.statusBar().showMessage(f"已创建项目并导入 {len(valid_paths)} 帧", 3000)
             return
 
         images_root = (Path(self.current_project["root"]) / "images").resolve()
