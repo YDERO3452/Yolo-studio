@@ -173,6 +173,9 @@ class ConfigManager:
         except FileNotFoundError:
             logger.warning(f"Config file not found: {path}, using defaults")
             return
+        except yaml.YAMLError as e:
+            logger.error(f"Config file is invalid YAML: {path} — {e}")
+            return
         if data:
             if "app" in data:
                 self.config.app = AppGeneralConfig(**data["app"])

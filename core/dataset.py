@@ -461,7 +461,16 @@ class DatasetManager:
 
         if not class_set:
             return ["目标"]
-        return [f"类别_{i}" for i in sorted(class_set)]
+        # Build a contiguous list where index == class_id.
+        # Pad with placeholder names for any gaps (e.g. {0, 2} → ["类别_0", "未命名_1", "类别_2"])
+        max_id = max(class_set)
+        names = []
+        for i in range(max_id + 1):
+            if i in class_set:
+                names.append(f"类别_{i}")
+            else:
+                names.append(f"未命名_{i}")
+        return names
 
     @staticmethod
     def _split_into_train_val(

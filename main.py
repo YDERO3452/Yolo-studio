@@ -16,8 +16,11 @@ sys.path.insert(0, str(project_root))
 (project_root / "logs").mkdir(exist_ok=True)
 
 # Enable faulthandler to print C-level traceback on segfault
-_fault_log = open(project_root / "logs" / "crash.log", "w", encoding="utf-8")
-faulthandler.enable(file=_fault_log, all_threads=True)
+try:
+    _fault_log = open(project_root / "logs" / "crash.log", "w", encoding="utf-8")
+    faulthandler.enable(file=_fault_log, all_threads=True)
+except OSError:
+    _fault_log = None  # harmless: crash log unavailable (disk full / permissions)
 
 from loguru import logger  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
@@ -29,14 +32,15 @@ def global_exception_hook(exc_type, exc_value, exc_tb):
     """Catch unhandled Python exceptions and log them."""
     msg = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
     logger.critical(f"Unhandled exception:\n{msg}")
-    _fault_log.write(f"PYTHON CRASH:\n{msg}\n")
-    _fault_log.flush()
+    if _fault_log is not None:
+        _fault_log.write(f"PYTHON CRASH:\n{msg}\n")
+        _fault_log.flush()
     sys.__excepthook__(exc_type, exc_value, exc_tb)
 
 
 def setup_logging() -> None:
     """设置日志系统."""
-    log_dir = Path("logs")
+    log_dir = project_root / "logs"
     log_dir.mkdir(exist_ok=True)
 
     logger.remove()  # 移除默认处理器
@@ -85,7 +89,8 @@ def main():
     ret = app.exec()
 
     # Cleanup
-    _fault_log.close()
+    if _fault_log is not None:
+        _fault_log.close()
     sys.exit(ret)
 
 

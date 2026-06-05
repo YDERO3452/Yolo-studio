@@ -444,7 +444,10 @@ class EnvironmentCheckDialog(QDialog):
         QApplication.clipboard().setText(copy_text)
         self.copy_btn.setText("已复制!")
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(2000, lambda: self.copy_btn.setText("复制安装命令"))
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda: self.copy_btn.setText("复制安装命令") if not self.isHidden() else None)
+        timer.start(2000)
 
     def _install_pytorch(self):
         """Attempt to install PyTorch GPU version via pip."""

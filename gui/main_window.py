@@ -2316,6 +2316,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         if hasattr(self, "project_panel"):
             self.project_panel.shutdown()
+        # Stop LLM workers
         if self._llm_batch_worker and self._llm_batch_worker.isRunning():
             self._llm_batch_worker.stop()
             self._llm_batch_worker.quit()
@@ -2332,6 +2333,13 @@ class MainWindow(QMainWindow):
             if not self._yolo_label_thread.wait(3000):
                 self._yolo_label_thread.terminate()
                 self._yolo_label_thread.wait(1000)
+        # Stop panel workers that may still be running
+        self.inference_panel._cleanup_worker()
+        self.inference_panel._cleanup_batch_worker()
+        self.export_panel._cleanup_worker()
+        # Signal Ultralytics trainer to stop, then clean up training worker
+        self.training_panel.stop_training()
+        self.training_panel._cleanup_worker()
         self.model_manager.clear_cache()
         logger.info("MainWindow closed")
         event.accept()

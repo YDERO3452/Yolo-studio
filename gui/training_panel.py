@@ -1631,6 +1631,8 @@ class TrainingPanel(QWidget):
     def _cleanup_worker(self):
         if self.worker is not None:
             if self.worker.isRunning():
+                # Signal Ultralytics trainer to stop gracefully before force-kill
+                self.stop_training()
                 self.worker.quit()
                 if not self.worker.wait(3000):
                     self.worker.terminate()
