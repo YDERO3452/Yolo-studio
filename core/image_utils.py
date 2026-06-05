@@ -1,8 +1,8 @@
 """Image utility functions — pure helpers with no UI dependencies."""
 
 
-from PIL import Image
 from loguru import logger
+from PIL import Image
 
 
 def read_image_size(image_path: str) -> tuple[int, int]:

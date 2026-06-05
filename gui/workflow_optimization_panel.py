@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from loguru import logger
 from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
