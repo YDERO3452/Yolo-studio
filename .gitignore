@@ -10,6 +10,9 @@ env/
 logs/
 runs/
 projects/
+data/
+models/
+presets/
 EzYOLO/
 config/llm_config.json
 .claude/
