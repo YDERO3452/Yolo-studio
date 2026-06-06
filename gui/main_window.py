@@ -2198,55 +2198,86 @@ class MainWindow(QMainWindow):
     def _show_auto_label_dialog_llm(self):
         dlg = QDialog(self)
         dlg.setWindowTitle("LLM 自动标注配置")
-        dlg.setMinimumWidth(600)
+        dlg.setMinimumWidth(620)
         dlg.setModal(True)
         layout = QVBoxLayout(dlg)
 
         llm_config = load_llm_config()
 
-        # Preset selector
-        preset_row = QHBoxLayout()
-        preset_label = QLabel("API 预设:")
-        preset_combo = QComboBox()
-        preset_combo.addItems(["自定义", "阿里云通义千问", "DeepSeek", "Ollama (本地)"])
+        # ── Presets: base_url + known vision models ──
+        SILICONFLOW_MODELS = [
+            "Qwen/Qwen3-VL-8B-Instruct",
+            "Qwen/Qwen3-VL-8B-Thinking",
+            "Qwen/Qwen3-VL-30B-A3B-Instruct",
+            "Qwen/Qwen3-VL-30B-A3B-Thinking",
+            "Qwen/Qwen3-VL-32B-Instruct",
+            "Qwen/Qwen3-VL-32B-Thinking",
+            "zai-org/GLM-4.5V",
+            "zai-org/GLM-4.6V",
+        ]
+        ALIYUN_MODELS = [
+            "qwen-vl-max", "qwen-vl-plus",
+            "qwen2.5-vl-72b-instruct", "qwen2.5-vl-32b-instruct",
+        ]
+        OLLAMA_MODELS = ["llava", "llava:13b", "bakllava", "minicpm-v"]
+
         preset_map = {
-            "阿里云通义千问": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-vl-max"),
-            "DeepSeek": ("https://api.deepseek.com/v1", "deepseek-chat"),
-            "Ollama (本地)": ("http://localhost:11434/v1", "llava"),
+            "硅基流动": ("https://api.siliconflow.cn/v1", SILICONFLOW_MODELS),
+            "阿里云通义千问": ("https://dashscope.aliyuncs.com/compatible-mode/v1", ALIYUN_MODELS),
+            "Ollama (本地)": ("http://localhost:11434/v1", OLLAMA_MODELS),
         }
 
         # Detect current preset
         current_base = llm_config.get("base_url", "")
         current_model = llm_config.get("model_name", "")
         selected_preset = "自定义"
-        for name, (base, model) in preset_map.items():
-            if current_base == base and current_model == model:
+        for name, (base, models) in preset_map.items():
+            if current_base == base:
                 selected_preset = name
                 break
-        preset_combo.setCurrentText(selected_preset)
 
-        preset_row.addWidget(preset_label)
+        preset_row = QHBoxLayout()
+        preset_row.addWidget(QLabel("API 预设:"))
+        preset_combo = QComboBox()
+        preset_combo.addItems(["自定义"] + list(preset_map.keys()))
+        preset_combo.setCurrentText(selected_preset)
         preset_row.addWidget(preset_combo)
         preset_row.addStretch()
         layout.addLayout(preset_row)
 
+        # ── Form fields ──
         form = QFormLayout()
+
         api_key_edit = QLineEdit(llm_config.get("api_key", ""))
         api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        api_key_edit.setPlaceholderText("sk-...")
         form.addRow("API Key:", api_key_edit)
 
-        base_url_edit = QLineEdit(llm_config.get("base_url", "https://dashscope.aliyuncs.com/compatible-mode/v1"))
+        base_url_edit = QLineEdit(current_base)
+        base_url_edit.setPlaceholderText("https://api.siliconflow.cn/v1")
         form.addRow("Base URL:", base_url_edit)
 
-        model_name_edit = QLineEdit(llm_config.get("model_name", "qwen-vl-max"))
-        form.addRow("模型名称:", model_name_edit)
+        # Model: editable combo (dropdown + manual input)
+        model_label = QLabel("视觉模型:")
+        model_combo = QComboBox()
+        model_combo.setEditable(True)
+        model_combo.setMinimumWidth(300)
+        if selected_preset in preset_map:
+            model_combo.addItems(preset_map[selected_preset][1])
+        model_combo.setCurrentText(current_model)
+        form.addRow(model_label, model_combo)
 
-        def on_preset_changed(index):
+        def on_preset_changed(_index):
             text = preset_combo.currentText()
+            model_combo.clear()
             if text in preset_map:
-                base, model = preset_map[text]
+                base, models = preset_map[text]
                 base_url_edit.setText(base)
-                model_name_edit.setText(model)
+                model_combo.addItems(models)
+                if models:
+                    model_combo.setCurrentIndex(0)
+            else:
+                model_combo.setEditText("")
 
         preset_combo.currentIndexChanged.connect(on_preset_changed)
 
@@ -2272,7 +2303,7 @@ class MainWindow(QMainWindow):
             new_config = {
                 "api_key": api_key_edit.text(),
                 "base_url": base_url_edit.text(),
-                "model_name": model_name_edit.text(),
+                "model_name": model_combo.currentText(),
                 "system_prompt": sys_prompt_edit.toPlainText(),
                 "user_prompt": user_prompt_edit.toPlainText(),
             }
