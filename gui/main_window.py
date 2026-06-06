@@ -210,10 +210,19 @@ class MainWindow(QMainWindow):
     def _create_nav_rail(self) -> QWidget:
         rail = QWidget()
         rail.setObjectName("NavRail")
-        rail.setFixedWidth(48)
         layout = QVBoxLayout(rail)
         layout.setContentsMargins(6, 8, 6, 8)
         layout.setSpacing(4)
+
+        # Wrap sidebar in scroll area so bottom tools aren't clipped on short windows
+        scroll = QScrollArea()
+        scroll.setObjectName("NavRailScroll")
+        scroll.setFixedWidth(54)  # 48 content + 6 for scrollbar
+        scroll.setWidget(rail)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setStyleSheet(f"QScrollArea#NavRailScroll {{ background: {Theme.BG}; border: none; }}")
 
         self.workspace_tab_group = QButtonGroup(self)
         self.workspace_tab_group.setExclusive(True)
@@ -298,7 +307,7 @@ class MainWindow(QMainWindow):
         self.mode_actions[CanvasMode.CREATE_BBOX].setChecked(True)
 
         layout.addStretch()
-        return rail
+        return scroll
 
     def _create_annotation_workspace(self) -> QWidget:
         page = QWidget()
