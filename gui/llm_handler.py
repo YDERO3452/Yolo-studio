@@ -24,12 +24,12 @@ EZYOLO_SYSTEM_PROMPT = """你是面向计算机视觉数据集的目标检测标
 核心要求：
 1. 目标类别：仅处理用户指定的类别，需找出图片中所有该类别实例；
 2. 坐标格式：每个边界框以 [xmin, ymin, xmax, ymax] 格式输出；
-3. 坐标范围：使用像素绝对坐标（整数），左上角为原点 (0, 0)，x 向右 y 向下；
+3. 坐标范围：使用归一化坐标，每个值在 0 到 1 之间（相对于图片宽高），左上角为原点 (0,0)；
 4. 输出格式：每行一个目标，格式为 "标签,[xmin,ymin,xmax,ymax]"；
 5. 无目标时输出空内容；
 6. 仅返回坐标数据，无任何说明文字。"""
 
-EZYOLO_USER_PROMPT = """请检测图片中的所有 {target}，返回像素坐标，格式每行一个：
+EZYOLO_USER_PROMPT = """请检测图片中的所有 {target}，返回归一化坐标（0-1之间），格式每行一个：
 {target},[xmin,ymin,xmax,ymax]
 {target},[xmin,ymin,xmax,ymax]
 ..."""
@@ -54,14 +54,12 @@ FREE_DETECT_SYSTEM_PROMPT = """你是面向计算机视觉数据集的目标检�
 核心要求：
 1. 识别图片中所有显著的前景物体（人、动物、车辆、家具、食物、电子产品等）；
 2. 为每个物体起一个简短的中文名称（如 "人"、"汽车"、"杯子"、"狗"）；
-3. 坐标使用像素绝对坐标（整数），左上角为原点 (0,0)，x 向右 y 向下；
+3. 坐标使用归一化坐标，每个值在 0 到 1 之间（相对于图片宽高），左上角为原点 (0,0)；
 4. 输出格式：每行一个目标，格式为 "名称,[xmin,ymin,xmax,ymax]"；
 5. 无明显物体时输出空内容；
 6. 仅返回坐标数据，无任何说明文字。"""
 
-FREE_DETECT_USER_PROMPT = """图片尺寸: {width} x {height} 像素
-
-请检测这张图片中的所有显著物体，返回像素坐标，格式每行一个：
+FREE_DETECT_USER_PROMPT = """请检测这张图片中的所有显著物体，返回归一化坐标（0-1之间），格式每行一个：
 物体名称,[xmin,ymin,xmax,ymax]
 物体名称,[xmin,ymin,xmax,ymax]
 ..."""
@@ -148,20 +146,15 @@ class LLMInferenceWorker(QThread):
         image_b64 = cls._encode_image_file(image_path)
         mime_type = cls._image_mime_type(image_path)
 
-        # Read image dimensions so model can calibrate coordinates
-        img_w, img_h = cls._read_image_size(image_path)
-
         # Free detect mode: model discovers all objects, no pre-defined class
         if target_class == "__free_detect__":
             system_prompt = FREE_DETECT_SYSTEM_PROMPT
-            user_prompt = FREE_DETECT_USER_PROMPT.format(width=img_w, height=img_h)
+            user_prompt = FREE_DETECT_USER_PROMPT
         else:
             system_prompt = config.get("system_prompt", DEFAULT_LLM_CONFIG["system_prompt"])
             user_prompt = cls._format_user_prompt(
                 config.get("user_prompt", DEFAULT_LLM_CONFIG["user_prompt"]), target_class,
             )
-            # Append image dimensions to help model calibrate
-            user_prompt = f"图片尺寸: {img_w} x {img_h} 像素\n\n{user_prompt}"
 
         try:
             response = client.chat.completions.create(
