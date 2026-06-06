@@ -48,6 +48,22 @@ OLD_EZYOLO_USER_PROMPT = """请检测图片中的所有 {target}，按以下格�
 {target},[xmin,ymin,xmax,ymax]
 ..."""
 
+# Free detection prompts — model discovers all objects and names them
+FREE_DETECT_SYSTEM_PROMPT = """你是面向计算机视觉数据集的目标检测标注专家。请检测图片中所有显著物体并标注。
+
+核心要求：
+1. 识别图片中所有显著的前景物体（人、动物、车辆、家具、食物、电子产品等）；
+2. 为每个物体起一个简短的中文名称（如 "人"、"汽车"、"杯子"、"狗"）；
+3. 坐标使用像素绝对坐标（整数），左上角为原点 (0,0)，x 向右 y 向下；
+4. 输出格式：每行一个目标，格式为 "名称,[xmin,ymin,xmax,ymax]"；
+5. 无明显物体时输出空内容；
+6. 仅返回坐标数据，无任何说明文字。"""
+
+FREE_DETECT_USER_PROMPT = """请检测这张图片中的所有显著物体，返回像素坐标，格式每行一个：
+物体名称,[xmin,ymin,xmax,ymax]
+物体名称,[xmin,ymin,xmax,ymax]
+..."""
+
 DEFAULT_LLM_CONFIG = {
     "api_key": "",
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -129,12 +145,20 @@ class LLMInferenceWorker(QThread):
 
         image_b64 = cls._encode_image_file(image_path)
         mime_type = cls._image_mime_type(image_path)
-        user_prompt = cls._format_user_prompt(config.get("user_prompt", DEFAULT_LLM_CONFIG["user_prompt"]), target_class)
+
+        # Free detect mode: model discovers all objects, no pre-defined class
+        if target_class == "__free_detect__":
+            system_prompt = FREE_DETECT_SYSTEM_PROMPT
+            user_prompt = FREE_DETECT_USER_PROMPT
+        else:
+            system_prompt = config.get("system_prompt", DEFAULT_LLM_CONFIG["system_prompt"])
+            user_prompt = cls._format_user_prompt(config.get("user_prompt", DEFAULT_LLM_CONFIG["user_prompt"]), target_class)
+
         try:
             response = client.chat.completions.create(
                 model=config.get("model_name", "qwen-vl-max"),
                 messages=[
-                    {"role": "system", "content": config.get("system_prompt", DEFAULT_LLM_CONFIG["system_prompt"])},
+                    {"role": "system", "content": system_prompt},
                     {
                         "role": "user",
                         "content": [

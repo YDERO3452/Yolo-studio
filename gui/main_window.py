@@ -467,6 +467,8 @@ class MainWindow(QMainWindow):
         llm_menu.addAction("单张推理", self._run_llm_auto_label)
         llm_menu.addAction("批量推理", self._run_llm_auto_label_batch)
         llm_menu.addSeparator()
+        llm_menu.addAction("自由检测 (自动发现类别)", self._run_llm_free_detect)
+        llm_menu.addSeparator()
         llm_menu.addAction("设置", self._show_auto_label_dialog_llm)
         self.llm_btn.setMenu(llm_menu)
         action_row.addWidget(self.llm_btn)
@@ -2068,6 +2070,112 @@ class MainWindow(QMainWindow):
     def _on_llm_error(self, error_msg: str):
         self.statusBar().showMessage(f"LLM 错误: {error_msg}", 5000)
         QMessageBox.critical(self, "LLM 错误", error_msg)
+
+    # ------------------------------------------------------------------
+    # LLM free detection (auto-discover classes)
+    # ------------------------------------------------------------------
+
+    def _run_llm_free_detect(self):
+        """LLM 自由检测 — 让模型自己发现所有物体并自动创建类别."""
+        if not self.current_image_path:
+            QMessageBox.warning(self, "提示", "请先打开图片")
+            return
+
+        llm_config = load_llm_config()
+        if not llm_config.get("base_url"):
+            QMessageBox.warning(self, "提示", "请先在 LLM 配置中设置 Base URL")
+            self._show_auto_label_dialog_llm()
+            return
+
+        self.statusBar().showMessage("LLM 自由检测中...", 0)
+        self._llm_worker = LLMInferenceWorker(
+            self.current_image_path, "__free_detect__", llm_config,
+        )
+        self._llm_worker.finished.connect(self._on_llm_free_result)
+        self._llm_worker.error.connect(self._on_llm_error)
+        self._llm_worker.start()
+
+    def _on_llm_free_result(self, detections):
+        self.statusBar().showMessage(f"LLM 自由检测完成: {len(detections)} 个目标", 3000)
+        if not detections:
+            QMessageBox.information(self, "完成", "未检测到目标")
+            return
+
+        img_w = self.canvas.image_width
+        img_h = self.canvas.image_height
+        if img_w <= 0 or img_h <= 0:
+            return
+
+        shapes = list(self.canvas.get_shapes())
+        existing_count = len(shapes)
+        self.canvas.push_undo()
+        shapes.extend(self._llm_free_detections_to_shapes(detections, img_w, img_h))
+        if len(shapes) == existing_count:
+            QMessageBox.information(self, "完成", "未生成有效标注")
+            return
+        self.canvas.set_shapes(shapes)
+        self.class_manager.save()
+        self.class_panel.refresh_list()
+        self.canvas.set_classes(self.class_manager.get_all_classes())
+        self._refresh_class_quick_buttons()
+        self.annot_list.refresh(shapes)
+        self._set_dirty(True)
+        self._autosave_annotations()
+        self.file_list.load_image_list(self.image_list)
+        self.file_list.highlight_current(self.current_image_index)
+
+    def _llm_free_detections_to_shapes(
+        self, detections, image_width: int, image_height: int,
+    ) -> list[dict]:
+        """Convert free-detection results to shapes, auto-creating new classes."""
+        shapes = []
+        classes = self.class_manager.get_all_classes()
+
+        for label, x1, y1, x2, y2 in detections:
+            label = label.strip()
+            if not label:
+                continue
+
+            # Convert coordinates
+            if max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 1.0:
+                abs_x1 = int(x1 * image_width)
+                abs_y1 = int(y1 * image_height)
+                abs_x2 = int(x2 * image_width)
+                abs_y2 = int(y2 * image_height)
+            else:
+                abs_x1, abs_y1, abs_x2, abs_y2 = int(x1), int(y1), int(x2), int(y2)
+
+            abs_x1 = max(0, min(abs_x1, image_width))
+            abs_y1 = max(0, min(abs_y1, image_height))
+            abs_x2 = max(0, min(abs_x2, image_width))
+            abs_y2 = max(0, min(abs_y2, image_height))
+            abs_x1, abs_x2 = sorted((abs_x1, abs_x2))
+            abs_y1, abs_y2 = sorted((abs_y1, abs_y2))
+
+            if abs_x2 - abs_x1 < 2 or abs_y2 - abs_y1 < 2:
+                continue
+
+            # Find or create class
+            class_id = None
+            for i, c in enumerate(classes):
+                if c == label:
+                    class_id = i
+                    break
+
+            if class_id is None:
+                # Auto-create new class
+                class_id = self.class_manager.add_class(label)
+                classes = self.class_manager.get_all_classes()
+                logger.info(f"自由检测自动创建类别: {label} (id={class_id})")
+
+            shapes.append({
+                "type": ShapeType.BBOX,
+                "class_id": class_id,
+                "class_name": label,
+                "data": {"x1": abs_x1, "y1": abs_y1, "x2": abs_x2, "y2": abs_y2},
+            })
+
+        return shapes
 
     # ------------------------------------------------------------------
     # Auto-label settings dialogs
