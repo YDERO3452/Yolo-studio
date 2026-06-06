@@ -770,9 +770,10 @@ class MainWindow(QMainWindow):
 
         self.project_required_actions.append(self._add_action(menubar, "自动标注", self._focus_auto_labeling_panel))
         self.project_required_actions.append(self._add_action(menubar, "类别名映射", self._show_class_name_map_dialog))
-        self.project_required_actions.append(self._add_action(menubar, "视频截帧", self._show_video_capture))
         self.project_required_actions.append(self._add_action(menubar, "格式转换", self._show_format_conversion))
-        self.project_required_actions.append(self._add_action(menubar, "管理项目", self._show_project_manager))
+        # 以下菜单项不需要项目也能使用
+        self._add_action(menubar, "视频截帧", self._show_video_capture)
+        self._add_action(menubar, "管理项目", self._show_project_manager)
         self._add_action(menubar, "环境", self._show_env_check)
         self._update_project_gate()
 
