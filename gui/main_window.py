@@ -2044,13 +2044,20 @@ class MainWindow(QMainWindow):
     ) -> list[dict]:
         shapes = []
         for _label, x1, y1, x2, y2 in detections:
-            if max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 1.0:
-                abs_x1 = int(x1 * image_width)
-                abs_y1 = int(y1 * image_height)
-                abs_x2 = int(x2 * image_width)
-                abs_y2 = int(y2 * image_height)
+            m = max(abs(x1), abs(y1), abs(x2), abs(y2))
+            if m <= 1.0:
+                # 0-1 normalized coordinates
+                scale_x, scale_y = image_width, image_height
+            elif m <= 1000:
+                # Qwen 0-1000 normalized coordinates
+                scale_x, scale_y = image_width / 1000.0, image_height / 1000.0
             else:
-                abs_x1, abs_y1, abs_x2, abs_y2 = int(x1), int(y1), int(x2), int(y2)
+                # Absolute pixel coordinates
+                scale_x, scale_y = 1.0, 1.0
+            abs_x1 = int(x1 * scale_x)
+            abs_y1 = int(y1 * scale_y)
+            abs_x2 = int(x2 * scale_x)
+            abs_y2 = int(y2 * scale_y)
             abs_x1 = max(0, min(abs_x1, image_width))
             abs_y1 = max(0, min(abs_y1, image_height))
             abs_x2 = max(0, min(abs_x2, image_width))
@@ -2137,13 +2144,20 @@ class MainWindow(QMainWindow):
                 continue
 
             # Convert coordinates
-            if max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 1.0:
-                abs_x1 = int(x1 * image_width)
-                abs_y1 = int(y1 * image_height)
-                abs_x2 = int(x2 * image_width)
-                abs_y2 = int(y2 * image_height)
+            m = max(abs(x1), abs(y1), abs(x2), abs(y2))
+            if m <= 1.0:
+                # 0-1 normalized coordinates
+                scale_x, scale_y = image_width, image_height
+            elif m <= 1000:
+                # Qwen 0-1000 normalized coordinates
+                scale_x, scale_y = image_width / 1000.0, image_height / 1000.0
             else:
-                abs_x1, abs_y1, abs_x2, abs_y2 = int(x1), int(y1), int(x2), int(y2)
+                # Absolute pixel coordinates
+                scale_x, scale_y = 1.0, 1.0
+            abs_x1 = int(x1 * scale_x)
+            abs_y1 = int(y1 * scale_y)
+            abs_x2 = int(x2 * scale_x)
+            abs_y2 = int(y2 * scale_y)
 
             abs_x1 = max(0, min(abs_x1, image_width))
             abs_y1 = max(0, min(abs_y1, image_height))
