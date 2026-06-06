@@ -24,11 +24,26 @@ EZYOLO_SYSTEM_PROMPT = """你是面向计算机视觉数据集的目标检测标
 核心要求：
 1. 目标类别：仅处理用户指定的类别，需找出图片中所有该类别实例；
 2. 坐标格式：每个边界框以 [xmin, ymin, xmax, ymax] 格式输出；
+3. 坐标范围：使用像素绝对坐标（整数），左上角为原点 (0, 0)，x 向右 y 向下；
+4. 输出格式：每行一个目标，格式为 "标签,[xmin,ymin,xmax,ymax]"；
+5. 无目标时输出空内容；
+6. 仅返回坐标数据，无任何说明文字。"""
+
+EZYOLO_USER_PROMPT = """请检测图片中的所有 {target}，返回像素坐标，格式每行一个：
+{target},[xmin,ymin,xmax,ymax]
+{target},[xmin,ymin,xmax,ymax]
+..."""
+
+# Old prompt versions — used for auto-migration
+OLD_EZYOLO_SYSTEM_PROMPT = """你是面向计算机视觉数据集的目标检测标注专家，仅输出指定目标的边界框坐标。
+核心要求：
+1. 目标类别：仅处理用户指定的类别，需找出图片中所有该类别实例；
+2. 坐标格式：每个边界框以 [xmin, ymin, xmax, ymax] 格式输出；
 3. 输出格式：每行一个目标，格式为 "标签,[xmin,ymin,xmax,ymax]"；
 4. 无目标时输出空内容；
 5. 仅返回坐标数据，无任何说明文字。"""
 
-EZYOLO_USER_PROMPT = """请检测图片中的所有 {target}，按以下格式返回每行一个：
+OLD_EZYOLO_USER_PROMPT = """请检测图片中的所有 {target}，按以下格式返回每行一个：
 {target},[xmin,ymin,xmax,ymax]
 {target},[xmin,ymin,xmax,ymax]
 ..."""
@@ -61,9 +76,10 @@ def load_llm_config() -> dict:
         except Exception:
             # harmless: config file missing or malformed, use defaults
             pass
-    if config.get("system_prompt") in ("", OLD_SYSTEM_PROMPT):
+    # Migrate old prompts to current version
+    if config.get("system_prompt") in ("", OLD_SYSTEM_PROMPT, OLD_EZYOLO_SYSTEM_PROMPT):
         config["system_prompt"] = EZYOLO_SYSTEM_PROMPT
-    if config.get("user_prompt") in ("", OLD_USER_PROMPT):
+    if config.get("user_prompt") in ("", OLD_USER_PROMPT, OLD_EZYOLO_USER_PROMPT):
         config["user_prompt"] = EZYOLO_USER_PROMPT
     return config
 
