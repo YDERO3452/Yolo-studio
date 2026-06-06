@@ -66,8 +66,8 @@ FREE_DETECT_USER_PROMPT = """请检测这张图片中的所有显著物体，返
 
 DEFAULT_LLM_CONFIG = {
     "api_key": "",
-    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    "model_name": "qwen-vl-max",
+    "base_url": "https://api.siliconflow.cn/v1",
+    "model_name": "Qwen/Qwen3-VL-8B-Instruct",
     "system_prompt": EZYOLO_SYSTEM_PROMPT,
     "user_prompt": EZYOLO_USER_PROMPT,
 }

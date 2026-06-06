@@ -2217,14 +2217,11 @@ class MainWindow(QMainWindow):
         ]
         ALIYUN_MODELS = [
             "qwen-vl-max", "qwen-vl-plus",
-            "qwen2.5-vl-72b-instruct", "qwen2.5-vl-32b-instruct",
         ]
-        OLLAMA_MODELS = ["llava", "llava:13b", "bakllava", "minicpm-v"]
 
         preset_map = {
             "硅基流动": ("https://api.siliconflow.cn/v1", SILICONFLOW_MODELS),
             "阿里云通义千问": ("https://dashscope.aliyuncs.com/compatible-mode/v1", ALIYUN_MODELS),
-            "Ollama (本地)": ("http://localhost:11434/v1", OLLAMA_MODELS),
         }
 
         # Detect current preset
