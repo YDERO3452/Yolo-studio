@@ -92,12 +92,14 @@ def load_llm_config() -> dict:
         except Exception:
             # harmless: config file missing or malformed, use defaults
             pass
-    # Migrate old prompts to current version (covers all known legacy prompts)
+    # Migrate old prompts to current version (detect any legacy prompt format)
     system_prompt = config.get("system_prompt", "")
-    if system_prompt in ("", OLD_SYSTEM_PROMPT, OLD_EZYOLO_SYSTEM_PROMPT) or "像素绝对坐标" in system_prompt:
+    any_legacy = system_prompt in ("", OLD_SYSTEM_PROMPT, OLD_EZYOLO_SYSTEM_PROMPT)
+    if any_legacy or "像素绝对坐标" in system_prompt or ("0 到 1" in system_prompt and "0-1000" not in system_prompt):
         config["system_prompt"] = EZYOLO_SYSTEM_PROMPT
     user_prompt = config.get("user_prompt", "")
-    if user_prompt in ("", OLD_USER_PROMPT, OLD_EZYOLO_USER_PROMPT) or "像素坐标" in user_prompt:
+    any_legacy_u = user_prompt in ("", OLD_USER_PROMPT, OLD_EZYOLO_USER_PROMPT)
+    if any_legacy_u or "像素坐标" in user_prompt or ("0-1之间" in user_prompt and "0-1000" not in user_prompt):
         config["user_prompt"] = EZYOLO_USER_PROMPT
     return config
 
