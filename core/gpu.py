@@ -6,6 +6,9 @@ from typing import Optional
 
 from loguru import logger
 
+# 模块级缓存：避免重复调用 nvidia-smi / torch
+_cached_detection: Optional["CUDADetection"] = None
+
 
 @dataclass
 class GPUInfo:
@@ -68,11 +71,19 @@ def _find_nvidia_smi() -> str:
     return ""
 
 
-def detect_cuda() -> CUDADetection:
-    """Detect CUDA availability and GPU information."""
+def detect_cuda(*, force_refresh: bool = False) -> CUDADetection:
+    """Detect CUDA availability and GPU information.
+
+    cuda_available 和 recommended_device 严格以 torch.cuda.is_available() 为准。
+    nvidia-smi 只用于补充 GPU 详情（VRAM、温度、利用率、驱动版本）。
+    """
+    global _cached_detection
+    if _cached_detection is not None and not force_refresh:
+        return _cached_detection
+
     result = CUDADetection()
 
-    # 1. Check PyTorch CUDA
+    # 1. Check PyTorch CUDA — 这是唯一的 cuda_available 判定来源
     try:
         import torch
         result.torch_version = torch.__version__
@@ -92,63 +103,73 @@ def detect_cuda() -> CUDADetection:
                     compute_capability=f"{props.major}.{props.minor}",
                 )
                 result.gpus.append(gpu)
-            result.recommended_device = "0"
-        else:
-            result.recommended_device = "cpu"
     except ImportError:
         result.error = "PyTorch not installed"
-        result.recommended_device = "cpu"
     except Exception as e:
         result.error = f"PyTorch CUDA check failed: {e}"
 
-    # 2. Try nvidia-smi for more details
+    # 2. Try nvidia-smi for more details（仅补充信息，不影响 cuda_available）
+    nvidia_smi_gpus: list[GPUInfo] = []
     try:
         nvidia_info = _query_nvidia_smi()
         if nvidia_info:
             result.driver_version = nvidia_info.get("driver_version", "")
             for gpu_data in nvidia_info.get("gpus", []):
                 idx = gpu_data.get("index", -1)
-                found = False
+                nvidia_gpu = GPUInfo(
+                    index=idx,
+                    name=gpu_data.get("name", "Unknown"),
+                    vram_total_mb=gpu_data.get("vram_total_mb", 0),
+                    vram_used_mb=gpu_data.get("vram_used_mb", 0),
+                    vram_free_mb=gpu_data.get("vram_free_mb", 0),
+                    temperature=gpu_data.get("temperature", 0),
+                    utilization=gpu_data.get("utilization", 0),
+                    driver_version=gpu_data.get("driver_version", ""),
+                )
+                nvidia_smi_gpus.append(nvidia_gpu)
+                # 合并详情到 torch 已发现的 GPU
                 for gpu in result.gpus:
                     if gpu.index == idx:
-                        gpu.vram_total_mb = gpu_data.get("vram_total_mb", gpu.vram_total_mb)
-                        gpu.vram_used_mb = gpu_data.get("vram_used_mb", 0)
-                        gpu.vram_free_mb = gpu_data.get("vram_free_mb", 0)
-                        gpu.temperature = gpu_data.get("temperature", 0)
-                        gpu.utilization = gpu_data.get("utilization", 0)
-                        gpu.driver_version = gpu_data.get("driver_version", "")
-                        found = True
+                        gpu.vram_total_mb = nvidia_gpu.vram_total_mb or gpu.vram_total_mb
+                        gpu.vram_used_mb = nvidia_gpu.vram_used_mb
+                        gpu.vram_free_mb = nvidia_gpu.vram_free_mb
+                        gpu.temperature = nvidia_gpu.temperature
+                        gpu.utilization = nvidia_gpu.utilization
+                        gpu.driver_version = nvidia_gpu.driver_version
                         break
-                if not found:
-                    result.gpus.append(GPUInfo(
-                        index=idx,
-                        name=gpu_data.get("name", "Unknown"),
-                        vram_total_mb=gpu_data.get("vram_total_mb", 0),
-                        vram_used_mb=gpu_data.get("vram_used_mb", 0),
-                        vram_free_mb=gpu_data.get("vram_free_mb", 0),
-                        temperature=gpu_data.get("temperature", 0),
-                        utilization=gpu_data.get("utilization", 0),
-                        driver_version=gpu_data.get("driver_version", ""),
-                    ))
             if not result.cuda_version:
                 result.cuda_version = nvidia_info.get("cuda_version", "")
-            result.cuda_available = bool(result.gpus)
-            result.gpu_count = len(result.gpus)
     except Exception as e:
         logger.debug(f"nvidia-smi query failed: {e}")
 
-    # If torch says CUDA is available, trust that
-    if result.torch_cuda_available:
-        result.cuda_available = True
+    # 3. 判定 cuda_available 和 recommended_device — 严格以 torch 为准
+    result.cuda_available = result.torch_cuda_available
+    result.recommended_device = "0" if result.torch_cuda_available else "cpu"
 
-    # If nvidia-smi found GPUs but torch didn't, still set available
-    if result.gpus and not result.cuda_available:
-        result.cuda_available = True
+    # 4. 如果 torch 没检测到 CUDA 但 nvidia-smi 有 GPU，给出诊断信息
+    if not result.torch_cuda_available and nvidia_smi_gpus:
+        # 保留 nvidia-smi 发现的 GPU 信息供 UI 显示
+        if not result.gpus:
+            result.gpus = nvidia_smi_gpus
+            result.gpu_count = len(nvidia_smi_gpus)
+        try:
+            import torch  # noqa: F811
+            if not result.torch_version:
+                result.torch_version = torch.__version__
+            torch_cuda = getattr(torch.version, "cuda", None)
+            if torch_cuda:
+                result.error = (
+                    f"PyTorch 编译了 CUDA {torch_cuda} 但 torch.cuda.is_available() 返回 False。"
+                    f"可能是驱动版本过低或 PyTorch CUDA 版本与驱动不兼容。"
+                )
+            else:
+                result.error = "安装了 CPU 版本的 PyTorch，需重装 CUDA 版。"
+        except ImportError:
+            result.error = "PyTorch 未安装"
+        except Exception:
+            pass
 
-    # Update recommended device if we have GPUs
-    if result.cuda_available and result.gpus and result.recommended_device == "cpu":
-        result.recommended_device = "0"
-
+    _cached_detection = result
     return result
 
 
@@ -235,3 +256,17 @@ def format_gpu_summary(detection: CUDADetection) -> str:
         lines.append("Device: CPU only")
 
     return "\n".join(lines)
+
+
+def get_device() -> str:
+    """返回推荐的推理/训练 device："0"（GPU）或 "cpu"。
+
+    统一入口，所有需要选 device 的模块都应调用此函数。
+    """
+    return detect_cuda().recommended_device
+
+
+def clear_cache():
+    """清除检测缓存，下次 detect_cuda() 将重新检测。"""
+    global _cached_detection
+    _cached_detection = None

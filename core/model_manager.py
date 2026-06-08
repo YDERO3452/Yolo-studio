@@ -95,11 +95,8 @@ class ModelManager:
         try:
             # Auto-detect device if not specified (MUST be done before cache lookup)
             if not device:
-                try:
-                    import torch
-                    device = "0" if torch.cuda.is_available() else "cpu"
-                except ImportError:
-                    device = "cpu"
+                from core.gpu import get_device
+                device = get_device()
 
             # Check if model is already loaded (cache hit)
             cache_key = f"{model_name}@{device}"

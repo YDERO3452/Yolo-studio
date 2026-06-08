@@ -49,11 +49,8 @@ class YOLOInference:
 
         # Auto-detect device if not specified
         if not device:
-            try:
-                import torch
-                device = "0" if torch.cuda.is_available() else "cpu"
-            except ImportError:
-                device = "cpu"
+            from core.gpu import get_device
+            device = get_device()
         self._device = device
 
         # Read performance settings from config
@@ -257,23 +254,20 @@ class YOLOInference:
 
     def get_device_info(self) -> dict:
         """Return current device and performance info for UI display."""
+        from core.gpu import detect_cuda
+        detection = detect_cuda()
         info = {
             "device": self._device or "auto",
             "half": self._half,
             "imgsz": self._imgsz,
         }
-        try:
-            import torch
-            if torch.cuda.is_available() and torch.cuda.device_count() > 0:
-                try:
-                    info["gpu_name"] = torch.cuda.get_device_name(0)
-                    info["gpu_memory"] = f"{torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB"
-                    info["cuda_version"] = torch.version.cuda or "N/A"
-                except (AssertionError, RuntimeError):
-                    # CUDA driver present but device inaccessible (e.g. driver mismatch)
-                    info["gpu_name"] = "N/A (CUDA device error)"
-            else:
-                info["gpu_name"] = "N/A (CPU only)"
-        except ImportError:
+        if detection.cuda_available and detection.gpus:
+            gpu = detection.gpus[0]
+            info["gpu_name"] = gpu.name
+            info["gpu_memory"] = f"{gpu.vram_total_mb / 1024:.1f} GB" if gpu.vram_total_mb else "N/A"
+            info["cuda_version"] = detection.cuda_version or "N/A"
+        elif detection.torch_version:
+            info["gpu_name"] = "N/A (CPU only)"
+        else:
             info["gpu_name"] = "N/A (torch not installed)"
         return info

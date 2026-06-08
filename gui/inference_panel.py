@@ -734,19 +734,19 @@ class InferencePanel(QWidget):
 
     def _detect_device_info(self):
         """Detect and display GPU/CPU device info."""
-        try:
-            import torch
-            if torch.cuda.is_available():
-                gpu_name = torch.cuda.get_device_name(0)
-                vram = torch.cuda.get_device_properties(0).total_memory / 1024**3
-                self.device_info_label.setText(f"GPU: {gpu_name} ({vram:.1f}GB)")
-                self.device_info_label.setStyleSheet("color: #3fb950; font-size: 11px;")
-            else:
-                self.device_info_label.setText("CUDA 不可用，将使用 CPU")
-                self.device_info_label.setStyleSheet("color: #f85149; font-size: 11px;")
-                self.half_check.setChecked(False)
-                self.half_check.setEnabled(False)
-        except ImportError:
+        from core.gpu import detect_cuda
+        detection = detect_cuda()
+        if detection.cuda_available and detection.gpus:
+            gpu = detection.gpus[0]
+            vram_gb = gpu.vram_total_mb / 1024 if gpu.vram_total_mb else 0
+            self.device_info_label.setText(f"GPU: {gpu.name} ({vram_gb:.1f}GB)")
+            self.device_info_label.setStyleSheet("color: #3fb950; font-size: 11px;")
+        elif detection.torch_version:
+            self.device_info_label.setText("CUDA 不可用，将使用 CPU")
+            self.device_info_label.setStyleSheet("color: #f85149; font-size: 11px;")
+            self.half_check.setChecked(False)
+            self.half_check.setEnabled(False)
+        else:
             self.device_info_label.setText("PyTorch 未安装")
             self.device_info_label.setStyleSheet("color: #f85149; font-size: 11px;")
             self.half_check.setChecked(False)
@@ -773,11 +773,8 @@ class InferencePanel(QWidget):
             half = self.half_check.isChecked()
 
             # Auto-detect device
-            try:
-                import torch
-                device = "0" if torch.cuda.is_available() else "cpu"
-            except ImportError:
-                device = "cpu"
+            from core.gpu import get_device
+            device = get_device()
 
             # Override config with UI selections
             if self.config:
