@@ -88,9 +88,15 @@ class DataAugmentor:
         for img_file in image_files:
             label_file = labels_path / (img_file.stem + ".txt")
 
-            # Read image
-            image = cv2.imread(str(img_file))
+            # Read image (use imdecode to handle non-ASCII paths)
+            try:
+                with open(str(img_file), "rb") as f:
+                    _data = np.frombuffer(f.read(), dtype=np.uint8)
+                image = cv2.imdecode(_data, cv2.IMREAD_COLOR)
+            except Exception:
+                image = cv2.imread(str(img_file))
             if image is None:
+                logger.warning(f"Failed to read image: {img_file}")
                 continue
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
@@ -139,8 +145,22 @@ class DataAugmentor:
         label_path: str,
         num_samples: int = 4,
     ) -> list[np.ndarray]:
-        """Preview augmentations on a single image."""
-        image = cv2.imread(image_path)
+        """Preview augmentations on a single image.
+
+        Returns an empty list if the image cannot be read.
+        """
+        # Use numpy to handle non-ASCII paths (same pattern as canvas.py)
+        try:
+            with open(image_path, "rb") as f:
+                data = np.frombuffer(f.read(), dtype=np.uint8)
+            image = cv2.imdecode(data, cv2.IMREAD_COLOR)
+        except Exception:
+            image = cv2.imread(image_path)
+
+        if image is None:
+            logger.warning(f"Failed to read image for preview: {image_path}")
+            return []
+
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         bboxes = []

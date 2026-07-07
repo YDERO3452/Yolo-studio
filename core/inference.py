@@ -60,10 +60,19 @@ class YOLOInference:
                 self._half = getattr(ic, "half", True)
                 self._imgsz = getattr(ic, "imgsz", 640)
 
-        # FP16 only works on CUDA — force-disable on CPU
+        # FP16 only works on CUDA GPUs with compute capability >= 6.0 (Pascal+).
+        # Force-disable on CPU, and on old GPUs where FP16 is unsupported or slower.
         if self._device == "cpu":
             self._half = False
             logger.info("CPU device detected — FP16 disabled (not supported on CPU)")
+        elif self._half:
+            cc = self._get_gpu_compute_capability()
+            if cc and cc < 6.0:
+                self._half = False
+                logger.info(
+                    f"GPU compute capability {cc} < 6.0 — FP16 disabled "
+                    f"(not supported on this architecture)"
+                )
 
         logger.info(
             f"Loaded model: {model_path}  device={self._device}  "
@@ -74,6 +83,25 @@ class YOLOInference:
         self._warmup()
 
         return self.model
+
+    def _get_gpu_compute_capability(self) -> Optional[float]:
+        """Get the compute capability of the current GPU device.
+
+        Returns None if not on GPU or detection fails.
+        Used to determine FP16 compatibility (requires CC >= 6.0).
+        """
+        if not self._device or self._device == "cpu":
+            return None
+        from core.gpu import detect_cuda
+        detection = detect_cuda()
+        if detection.gpus:
+            cc_str = detection.gpus[0].compute_capability
+            if cc_str:
+                try:
+                    return float(cc_str)
+                except ValueError:
+                    return None
+        return None
 
     def _warmup(self):
         """Run a single dummy inference to pre-compile CUDA kernels.

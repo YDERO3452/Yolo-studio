@@ -1,7 +1,10 @@
 """LLM-based auto-labeling via OpenAI-compatible API."""
 
 import base64
+import getpass
+import hashlib
 import json
+import platform
 import re
 from pathlib import Path
 from typing import Any, Optional
@@ -73,6 +76,54 @@ DEFAULT_LLM_CONFIG = {
 }
 
 
+# ---------------------------------------------------------------------------
+# API Key obfuscation — prevents casual plaintext reading of the key.
+# Uses a machine-specific key (hostname + username) so the config file
+# cannot be simply copied to another machine to steal credentials.
+# ---------------------------------------------------------------------------
+
+_ENC_PREFIX = "enc:"
+
+
+def _machine_key() -> bytes:
+    """Derive a machine-specific key from hostname and username."""
+    machine_id = f"{platform.node()}-{getpass.getuser()}-YoloStudio-v1"
+    return hashlib.pbkdf2_hmac("sha256", machine_id.encode(), b"YoloStudio-salt", 100_000)
+
+
+def _xor_bytes(data: bytes, key: bytes) -> bytes:
+    """XOR encrypt/decrypt (symmetric)."""
+    return bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
+
+
+def encrypt_api_key(api_key: str) -> str:
+    """Encrypt an API key for storage. Returns 'enc:<base64>' or empty string."""
+    if not api_key:
+        return ""
+    key = _machine_key()
+    encrypted = _xor_bytes(api_key.encode("utf-8"), key)
+    return _ENC_PREFIX + base64.b64encode(encrypted).decode("ascii")
+
+
+def decrypt_api_key(stored: str) -> str:
+    """Decrypt an API key from storage.
+
+    Backward compatible: if the value doesn't start with 'enc:', it's
+    treated as a legacy plaintext key and returned as-is.
+    """
+    if not stored:
+        return ""
+    if not stored.startswith(_ENC_PREFIX):
+        return stored  # Legacy plaintext format
+    key = _machine_key()
+    encrypted = base64.b64decode(stored[len(_ENC_PREFIX):])
+    try:
+        return _xor_bytes(encrypted, key).decode("utf-8")
+    except Exception:
+        logger.warning("Failed to decrypt API key — it may be from a different machine")
+        return ""
+
+
 def load_llm_config() -> dict:
     config = dict(DEFAULT_LLM_CONFIG)
     # Try writable location first (user's saved config)
@@ -92,6 +143,8 @@ def load_llm_config() -> dict:
         except Exception:
             # harmless: config file missing or malformed, use defaults
             pass
+    # Decrypt API key (backward compatible with old plaintext storage)
+    config["api_key"] = decrypt_api_key(config.get("api_key", ""))
     # Migrate old prompts to current version (detect any legacy prompt format)
     system_prompt = config.get("system_prompt", "")
     any_legacy = system_prompt in ("", OLD_SYSTEM_PROMPT, OLD_EZYOLO_SYSTEM_PROMPT)
@@ -106,7 +159,10 @@ def load_llm_config() -> dict:
 
 def save_llm_config(config: dict):
     LLM_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    LLM_CONFIG_PATH.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+    # Encrypt API key before writing to disk
+    safe_config = dict(config)
+    safe_config["api_key"] = encrypt_api_key(config.get("api_key", ""))
+    LLM_CONFIG_PATH.write_text(json.dumps(safe_config, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 class LLMInferenceWorker(QThread):

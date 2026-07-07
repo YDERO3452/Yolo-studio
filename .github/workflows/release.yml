@@ -39,9 +39,12 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller
+          # Build with CPU-only torch to keep exe size manageable (~350 MB vs ~2.5 GB).
+          # The app's built-in env check dialog guides users to install
+          # CUDA torch if they have an NVIDIA GPU.
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          pip install ultralytics onnx onnxruntime openai Pillow PyQt6 PyQt6-Qt6 opencv-python albumentations matplotlib pyyaml pydantic pandas loguru tqdm numpy
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Download font (optional)
         continue-on-error: true
@@ -97,10 +100,11 @@ jobs:
             ### 下载
             | 平台 | 文件 |
             |------|------|
-            | Windows | `YoloStudio.exe` (346 MB) |
-            | Linux | `YoloStudio` (496 MB) |
+            | Windows | `YoloStudio.exe` |
+            | Linux | `YoloStudio` |
 
             ### 使用说明
+
             **Windows**: 下载 `YoloStudio.exe`，双击运行
 
             **Linux**:
@@ -109,7 +113,37 @@ jobs:
             ./YoloStudio
             ```
 
-            首次运行会自动下载 YOLO 模型，如需 GPU 加速请安装 [CUDA + PyTorch](https://pytorch.org/get-started/locally/)
+            ### GPU 加速 (NVIDIA 显卡)
+
+            打包版本默认使用 CPU 模式。如需 GPU 加速，请在应用内操作：
+
+            1. 打开菜单 → **环境** → 自动检测 GPU 和驱动
+            2. 点击 **安装 PyTorch (cu121)** 按钮一键安装 CUDA 版 PyTorch
+            3. 或手动执行：
+               ```
+               pip install torch torchvision --force-reinstall --index-url https://download.pytorch.org/whl/cu121
+               ```
+
+            驱动要求：NVIDIA 驱动 >= 525.60（CUDA 12.0+）
+            查看驱动支持的 CUDA 版本：`nvidia-smi`
+
+            ### 从源码安装
+
+            ```bash
+            # 1. 配置国内镜像源（可选，加速下载）
+            pip config set global.index-url https://mirrors.aliyun.com/pypi/simple
+
+            # 2a. CPU 模式
+            pip install -r requirements.txt
+
+            # 2b. NVIDIA GPU 模式 (CUDA 12.1)
+            pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+            pip install -r requirements.txt
+            ```
+
+            或使用一键安装脚本：
+            - Windows: `scripts\install.bat`
+            - Linux/macOS: `bash scripts/install.sh`
 
             ### 更新内容
             ${{ steps.changelog.outputs.changes }}

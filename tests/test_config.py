@@ -25,7 +25,7 @@ class TestTrainingConfig:
         assert cfg.epochs == 100
         assert cfg.batch == 16
         assert cfg.imgsz == 640
-        assert cfg.device == "0"
+        assert cfg.device is None  # None = auto-detect (was "0", changed to prevent crash on no-GPU machines)
         assert cfg.workers == 8
         assert cfg.time is None
 

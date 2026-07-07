@@ -354,7 +354,7 @@ class EnvironmentCheckDialog(QDialog):
         install_lines.append("离线安装 (下载后):")
         install_lines.append(torch_cmds["install_local_dir"])
         install_lines.append("")
-        install_lines.append("pip install ultralytics")
+        install_lines.append(f'"{sys.executable}" -m pip install ultralytics')
 
         # AMD Linux specific
         if env.has_amd_gpu and not env.has_nvidia_gpu and not env.is_windows:
@@ -545,7 +545,8 @@ class EnvironmentCheckDialog(QDialog):
 
     def _install_ultralytics(self):
         """Install Ultralytics via pip."""
-        self._run_pip_install("Ultralytics", "pip install ultralytics")
+        cmd = f'"{sys.executable}" -m pip install ultralytics'
+        self._run_pip_install("Ultralytics", cmd)
 
     def _run_pip_install(self, name: str, cmd: str):
         """Run a pip install command (async) and show result."""

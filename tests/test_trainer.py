@@ -161,8 +161,8 @@ class TestBuildTrainArgs:
         assert args["epochs"] == 100
         assert args["batch"] == 16
         assert args["imgsz"] == 640
-        assert args["device"] == "0"
-        assert args["workers"] == 8
+        assert "device" not in args or args["device"] is None  # None = auto-detect (excluded from args)
+        assert args["workers"] == 8 or (sys.platform == "win32" and args["workers"] == 4)  # Windows caps workers at 4
 
 
 # ---------------------------------------------------------------------------

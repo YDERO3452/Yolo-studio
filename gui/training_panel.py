@@ -948,7 +948,7 @@ class TrainingPanel(QWidget):
 
     def refresh_gpu_info(self):
         """Re-detect GPU and update display."""
-        self.gpu_detection = detect_cuda()
+        self.gpu_detection = detect_cuda(force_refresh=True)
         self.gpu_info_label.setText(self._format_device_summary())
 
         # Update device combo
@@ -1023,12 +1023,20 @@ class TrainingPanel(QWidget):
                 break
 
     def _update_device_status(self, text: str):
-        """Update the device status label based on selected device."""
+        """Update the device status label based on selected device.
+
+        Also auto-adjusts AMP setting: AMP requires CUDA, so it is
+        disabled when CPU is selected to prevent training errors.
+        """
         device_data = self.device_combo.currentData() or text
 
         if device_data == "cpu" or device_data.lower() == "cpu":
             self.device_status_label.setText("CPU 模式 — 训练速度较慢")
             self.device_status_label.set_variant("warning")
+            # AMP requires CUDA — disable on CPU to prevent training errors
+            if hasattr(self, "amp_check") and self.amp_check.isChecked():
+                self.amp_check.setChecked(False)
+                self.amp_check.setToolTip("AMP 需要CUDA GPU，CPU 模式已自动禁用")
         elif device_data and device_data.replace(",", "").isdigit():
             gpu_count = len(device_data.split(","))
             if gpu_count > 1:
@@ -1044,6 +1052,9 @@ class TrainingPanel(QWidget):
                     gpu_name = f"{gpu.name} (可用 {free_mb}MB)"
                 self.device_status_label.setText(f"GPU 加速 — {gpu_name}")
                 self.device_status_label.set_variant("accent")
+            # Re-enable AMP for GPU mode (if it was auto-disabled by CPU selection)
+            if hasattr(self, "amp_check"):
+                self.amp_check.setToolTip("AMP 可大幅降低显存占用，低显存显卡建议开启")
         else:
             self.device_status_label.setText(f"设备: {text}")
             self.device_status_label.set_variant("")

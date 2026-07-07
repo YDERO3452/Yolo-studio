@@ -273,6 +273,21 @@ class FormatConverter:
             with open(coco_file, 'r', encoding='utf-8') as f:
                 coco_data = json.load(f)
 
+            # Build COCO category_id → YOLO class_id mapping.
+            # COCO category_id can be arbitrary (often 1-based or non-contiguous),
+            # while YOLO class_id must be 0-based contiguous index.
+            cat_id_to_class_id: dict[int, int] = {}
+            cat_id_to_name: dict[int, str] = {}
+            for cat in coco_data.get('categories', []):
+                cat_id_to_name[cat['id']] = cat['name']
+                # Match by name to our class_names list
+                cat_name = cat['name']
+                if cat_name in self.class_id_map:
+                    cat_id_to_class_id[cat['id']] = self.class_id_map[cat_name]
+                else:
+                    # Fallback: use sequential index (dangerous if non-contiguous)
+                    cat_id_to_class_id[cat['id']] = len(cat_id_to_class_id)
+
             # Find annotations for this image
             for ann in coco_data.get('annotations', []):
                 if ann['image_id'] != image_id:
@@ -286,15 +301,11 @@ class FormatConverter:
                 x2 = bbox[0] + bbox[2]
                 y2 = bbox[1] + bbox[3]
 
-                # Find class name
-                class_name = str(category_id)
-                for cat in coco_data.get('categories', []):
-                    if cat['id'] == category_id:
-                        class_name = cat['name']
-                        break
+                class_name = cat_id_to_name.get(category_id, str(category_id))
+                class_id = cat_id_to_class_id.get(category_id, 0)
 
                 detections.append(Detection(
-                    class_id=category_id,
+                    class_id=class_id,
                     class_name=class_name,
                     x1=x1,
                     y1=y1,
@@ -614,13 +625,21 @@ class FormatConverter:
                     img_h = img_info.get('height', 0)
                     file_stem = Path(img_info.get('file_name', f'image_{img_id}')).stem
 
+                    # Map COCO category_id → YOLO 0-based class_id by name
+                    cat_id_to_yolo: dict[int, int] = {}
+                    for cat_id_val, cat_name_val in cat_map.items():
+                        if cat_name_val in self.class_id_map:
+                            cat_id_to_yolo[cat_id_val] = self.class_id_map[cat_name_val]
+                        else:
+                            cat_id_to_yolo[cat_id_val] = len(cat_id_to_yolo)
+
                     dets = []
                     for ann in ann_by_image.get(img_id, []):
                         bbox = ann['bbox']
                         cat_id = ann['category_id']
                         cat_name = cat_map.get(cat_id, str(cat_id))
                         dets.append(Detection(
-                            class_id=cat_id,
+                            class_id=cat_id_to_yolo.get(cat_id, 0),
                             class_name=cat_name,
                             x1=bbox[0],
                             y1=bbox[1],

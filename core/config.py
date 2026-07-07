@@ -22,7 +22,7 @@ class TrainingConfig(BaseModel):
     time: Optional[float] = None          # max training hours (overrides epochs)
     batch: int = 16                       # was batch_size
     imgsz: int = 640                      # was img_size
-    device: str = "0"
+    device: Optional[str] = None  # None = auto-detect (GPU if available, else CPU)
     workers: int = 8
     patience: int = 100
     save_period: int = -1                 # -1 = disabled

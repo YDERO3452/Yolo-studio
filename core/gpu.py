@@ -1,6 +1,8 @@
 """GPU / CUDA detection and monitoring module."""
 
+import re
 import subprocess
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -8,6 +10,8 @@ from loguru import logger
 
 # 模块级缓存：避免重复调用 nvidia-smi / torch
 _cached_detection: Optional["CUDADetection"] = None
+_cache_timestamp: float = 0.0
+_CACHE_TTL_SECONDS: int = 300  # 5 minutes — auto-refresh stale cache
 
 
 @dataclass
@@ -76,10 +80,15 @@ def detect_cuda(*, force_refresh: bool = False) -> CUDADetection:
 
     cuda_available 和 recommended_device 严格以 torch.cuda.is_available() 为准。
     nvidia-smi 只用于补充 GPU 详情（VRAM、温度、利用率、驱动版本）。
+
+    Results are cached for 5 minutes. Use force_refresh=True to bypass cache.
     """
-    global _cached_detection
+    global _cached_detection, _cache_timestamp
+
+    # Check cache: return if fresh enough and not force_refresh
     if _cached_detection is not None and not force_refresh:
-        return _cached_detection
+        if time.time() - _cache_timestamp < _CACHE_TTL_SECONDS:
+            return _cached_detection
 
     result = CUDADetection()
 
@@ -114,6 +123,9 @@ def detect_cuda(*, force_refresh: bool = False) -> CUDADetection:
         nvidia_info = _query_nvidia_smi()
         if nvidia_info:
             result.driver_version = nvidia_info.get("driver_version", "")
+            # 如果 torch 没有提供 CUDA 版本，用 nvidia-smi 的
+            if not result.cuda_version:
+                result.cuda_version = nvidia_info.get("cuda_version", "")
             for gpu_data in nvidia_info.get("gpus", []):
                 idx = gpu_data.get("index", -1)
                 nvidia_gpu = GPUInfo(
@@ -137,8 +149,6 @@ def detect_cuda(*, force_refresh: bool = False) -> CUDADetection:
                         gpu.utilization = nvidia_gpu.utilization
                         gpu.driver_version = nvidia_gpu.driver_version
                         break
-            if not result.cuda_version:
-                result.cuda_version = nvidia_info.get("cuda_version", "")
     except Exception as e:
         logger.debug(f"nvidia-smi query failed: {e}")
 
@@ -170,11 +180,30 @@ def detect_cuda(*, force_refresh: bool = False) -> CUDADetection:
             pass
 
     _cached_detection = result
+    _cache_timestamp = time.time()
     return result
 
 
+def _safe_int(value: str, default: int = 0) -> int:
+    """Safely parse an int from nvidia-smi output, handling '[N/A]' and other edge cases.
+
+    nvidia-smi can return '[N/A]' for temperature, utilization, etc. on
+    virtual GPUs (vGPU), cloud instances (AWS/GCP), or certain driver versions.
+    """
+    if not value or value.strip().upper() in ("[N/A]", "N/A", "NA", "[NOT AVAIL]", ""):
+        return default
+    try:
+        return int(float(value))
+    except (ValueError, TypeError):
+        return default
+
+
 def _query_nvidia_smi() -> Optional[dict]:
-    """Query nvidia-smi for GPU information."""
+    """Query nvidia-smi for GPU information.
+
+    Returns driver_version, cuda_version (from nvidia-smi header), and
+    per-GPU details (VRAM, temperature, utilization).
+    """
     try:
         nvidia_smi = _find_nvidia_smi()
         if not nvidia_smi:
@@ -198,22 +227,27 @@ def _query_nvidia_smi() -> Optional[dict]:
             parts = [p.strip() for p in line.split(",")]
             if len(parts) >= 8:
                 gpus.append({
-                    "index": int(parts[0]),
+                    "index": _safe_int(parts[0]),
                     "name": parts[1],
-                    "vram_total_mb": int(float(parts[2])),
-                    "vram_used_mb": int(float(parts[3])),
-                    "vram_free_mb": int(float(parts[4])),
+                    "vram_total_mb": _safe_int(parts[2]),
+                    "vram_used_mb": _safe_int(parts[3]),
+                    "vram_free_mb": _safe_int(parts[4]),
                     "driver_version": parts[5],
-                    "temperature": int(float(parts[6])),
-                    "utilization": int(float(parts[7])),
+                    "temperature": _safe_int(parts[6]),
+                    "utilization": _safe_int(parts[7]),
                 })
 
         # Driver version already in each GPU's data from the first query
         driver_version = gpus[0]["driver_version"] if gpus else ""
 
+        # Read CUDA version from nvidia-smi header output.
+        # nvidia-smi prints: "NVIDIA-SMI 550.54  Driver Version: 550.54  CUDA Version: 12.4"
+        # This is the max CUDA version the driver supports.
+        cuda_version = _read_cuda_version_from_smi(nvidia_smi)
+
         return {
             "driver_version": driver_version,
-            "cuda_version": "",
+            "cuda_version": cuda_version,
             "gpus": gpus,
         }
 
@@ -224,6 +258,29 @@ def _query_nvidia_smi() -> Optional[dict]:
     except Exception as e:
         logger.debug(f"nvidia-smi error: {e}")
         return None
+
+
+def _read_cuda_version_from_smi(nvidia_smi: str) -> str:
+    """Read the CUDA version directly from nvidia-smi header output.
+
+    The nvidia-smi command always prints a header line like:
+        NVIDIA-SMI 550.54.15  Driver Version: 550.54.15  CUDA Version: 12.4
+    This CUDA Version represents the maximum CUDA version the installed
+    driver supports.
+    """
+    try:
+        proc = subprocess.run(
+            [nvidia_smi],
+            capture_output=True, text=True, timeout=5,
+        )
+        if proc.returncode == 0:
+            # Match "CUDA Version: 12.4" or "CUDA Version: 13.0"
+            match = re.search(r'CUDA Version:\s*(\d+\.\d+)', proc.stdout)
+            if match:
+                return match.group(1)
+    except Exception as e:
+        logger.debug(f"Failed to read CUDA version from nvidia-smi: {e}")
+    return ""
 
 
 
@@ -268,5 +325,6 @@ def get_device() -> str:
 
 def clear_cache():
     """清除检测缓存，下次 detect_cuda() 将重新检测。"""
-    global _cached_detection
+    global _cached_detection, _cache_timestamp
     _cached_detection = None
+    _cache_timestamp = 0.0

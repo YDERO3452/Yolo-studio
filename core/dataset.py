@@ -95,10 +95,6 @@ class DatasetManager:
         if flip_idx is None:
             flip_idx = detected_flip_idx
 
-        # Store detected config for use by builder methods
-        DatasetManager._detected_kpt_shape = kpt_shape
-        DatasetManager._detected_flip_idx = flip_idx
-
         # Determine if images are already in YOLO-standard layout
         # (i.e. under an "images" directory with train/val subdirs)
         yolo_standard = DatasetManager._is_yolo_standard_layout(images_path)
@@ -114,6 +110,8 @@ class DatasetManager:
                 train_ratio=train_ratio,
                 val_ratio=val_ratio,
                 test_ratio=test_ratio,
+                kpt_shape=kpt_shape,
+                flip_idx=flip_idx,
             )
         else:
             # Flat folder or non-standard layout — need to split & copy
@@ -125,6 +123,8 @@ class DatasetManager:
                 train_ratio=train_ratio,
                 val_ratio=val_ratio,
                 test_ratio=test_ratio,
+                kpt_shape=kpt_shape,
+                flip_idx=flip_idx,
             )
 
     @staticmethod
@@ -171,10 +171,6 @@ class DatasetManager:
                 return True
 
         return False
-
-    # Shared state for passing detected keypoint config to builder methods
-    _detected_kpt_shape: Optional[list[int]] = None
-    _detected_flip_idx: Optional[list[int]] = None
 
     @staticmethod
     def _detect_kpt_config(
@@ -249,6 +245,8 @@ class DatasetManager:
         train_ratio: float,
         val_ratio: float,
         test_ratio: float,
+        kpt_shape: Optional[list[int]] = None,
+        flip_idx: Optional[list[int]] = None,
     ) -> str:
         """Build data.yaml for an already YOLO-standard directory tree.
 
@@ -281,12 +279,10 @@ class DatasetManager:
         }
 
         # Add keypoint config if detected (required for pose training)
-        kpt = DatasetManager._detected_kpt_shape
-        fidx = DatasetManager._detected_flip_idx
-        if kpt is not None:
-            data_yaml_dict["kpt_shape"] = kpt
-        if fidx is not None:
-            data_yaml_dict["flip_idx"] = fidx
+        if kpt_shape is not None:
+            data_yaml_dict["kpt_shape"] = kpt_shape
+        if flip_idx is not None:
+            data_yaml_dict["flip_idx"] = flip_idx
 
         image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
 
@@ -339,6 +335,8 @@ class DatasetManager:
         train_ratio: float,
         val_ratio: float,
         test_ratio: float,
+        kpt_shape: Optional[list[int]] = None,
+        flip_idx: Optional[list[int]] = None,
     ) -> str:
         """Build data.yaml from a flat folder of images (legacy layout).
 
@@ -409,12 +407,10 @@ class DatasetManager:
             data_yaml_dict["test"] = "images/test"
 
         # Add keypoint config if detected (required for pose training)
-        kpt = DatasetManager._detected_kpt_shape
-        fidx = DatasetManager._detected_flip_idx
-        if kpt is not None:
-            data_yaml_dict["kpt_shape"] = kpt
-        if fidx is not None:
-            data_yaml_dict["flip_idx"] = fidx
+        if kpt_shape is not None:
+            data_yaml_dict["kpt_shape"] = kpt_shape
+        if flip_idx is not None:
+            data_yaml_dict["flip_idx"] = flip_idx
 
         yaml_path = Path(output_yaml) if output_yaml else dataset_dir / "data.yaml"
         yaml_path.parent.mkdir(parents=True, exist_ok=True)

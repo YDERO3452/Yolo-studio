@@ -132,8 +132,12 @@ class AnnotationCanvas(QWidget):
         self.classes = classes
 
     def get_shapes(self) -> list[dict]:
-        """Return a copy of the current shapes list."""
-        return self.shapes
+        """Return a deep copy of the current shapes list.
+
+        Callers may freely mutate the returned list and its dicts without
+        affecting the canvas's internal state.
+        """
+        return copy.deepcopy(self.shapes)
 
     def set_mode(self, mode: CanvasMode):
         """Set the current canvas interaction mode."""

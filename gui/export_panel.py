@@ -109,6 +109,7 @@ class ExportPanel(QWidget):
         # Export options
         row2 = QHBoxLayout()
         self.half_check = QCheckBox("FP16 半精度")
+        self.half_check.setToolTip("FP16 需要 NVIDIA GPU，CPU 模式不可用")
         self.dynamic_check = QCheckBox("动态输入")
         self.simplify_check = QCheckBox("简化模型")
         self.simplify_check.setChecked(True)
@@ -116,6 +117,9 @@ class ExportPanel(QWidget):
         row2.addWidget(self.dynamic_check)
         row2.addWidget(self.simplify_check)
         format_layout.addLayout(row2)
+
+        # Auto-disable FP16 if CUDA is not available
+        self._check_cuda_for_half()
 
         row3 = QHBoxLayout()
         row3.addWidget(QLabel("图像尺寸:"))
@@ -241,6 +245,21 @@ class ExportPanel(QWidget):
             QMessageBox.information(self, "成功", "模型加载成功!")
         except Exception as e:
             QMessageBox.critical(self, "加载失败", str(e))
+
+    def _check_cuda_for_half(self):
+        """Disable FP16 checkbox if CUDA is not available (CPU-only torch or no GPU)."""
+        try:
+            from core.gpu import detect_cuda
+            detection = detect_cuda()
+            if not detection.cuda_available:
+                self.half_check.setChecked(False)
+                self.half_check.setEnabled(False)
+                if detection.torch_version:
+                    self.half_check.setToolTip("CUDA 不可用（安装了 CPU 版 PyTorch），FP16 不可用")
+                else:
+                    self.half_check.setToolTip("PyTorch 未安装，FP16 不可用")
+        except Exception:
+            pass  # harmless: GPU detection failed, leave checkbox as-is
 
     def export_model(self):
         if not self.exporter:

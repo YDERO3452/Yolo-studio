@@ -6,9 +6,9 @@
 [![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
 [![PyQt6](https://img.shields.io/badge/GUI-PyQt6-orange.svg)](https://www.riverbankcomputing.com/static/Docs/PyQt6/)
 [![Platform](https://img.shields.io/badge/Platform-Windows_|_Linux-lightgrey.svg)](https://github.com)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.1+-red.svg)](https://pytorch.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.2+-red.svg)](https://pytorch.org/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.8+-purple.svg)](https://opencv.org/)
-[![Ultralytics](https://img.shields.io/badge/Ultralytics-8.2+-yellow.svg)](https://ultralytics.com/)
+[![Ultralytics](https://img.shields.io/badge/Ultralytics-8.3+-yellow.svg)](https://ultralytics.com/)
 
 **专业的 YOLO 系列模型标注与训练桌面工作台**
 
@@ -92,18 +92,60 @@ YOLO Studio 是一个基于 PyQt6 和 Ultralytics YOLO 框架开发的桌面端�
 
 - **操作系统**：Windows 10/11、Linux (Ubuntu 20.04+)
 - **Python 版本**：3.10 或更高版本
-- **GPU 支持**：CUDA 11.x+（可选，CPU 模式也可运行）
+- **GPU 支持**：NVIDIA GPU + CUDA 12.1（可选，CPU 模式也可运行）
 - **内存建议**：8GB RAM 以上
 
 ---
 
 ## 快速开始
 
-### 安装依赖
+### 方式一：一键安装脚本（推荐）
 
+**Windows:**
+```bat
+scripts\install.bat
+```
+
+**Linux / macOS:**
+```bash
+bash scripts/install.sh
+```
+
+脚本会自动检测 NVIDIA GPU 并选择安装 CPU 或 CUDA 版 PyTorch。
+
+### 方式二：手动安装
+
+> **国内加速**：先配置镜像源再安装
+> ```bash
+> pip config set global.index-url https://mirrors.aliyun.com/pypi/simple
+> pip config set global.trusted-host mirrors.aliyun.com
+> ```
+
+**CPU 模式**（无 NVIDIA 显卡）：
 ```bash
 pip install -r requirements.txt
 ```
+
+**NVIDIA GPU 模式**：先查看你的驱动支持的 CUDA 版本，再选择对应的 wheel：
+```bash
+# 1. 查看驱动支持的 CUDA 版本
+nvidia-smi
+#    输出示例: "CUDA Version: 12.4" → 选 cu124
+
+# 2. 根据版本选择（PyTorch 官方源，国内镜像无 CUDA wheel）
+#    CUDA 12.4+:  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+#    CUDA 12.1+:  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#    CUDA 11.8+:  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+# 3. 再装其余依赖（走国内镜像）
+pip install -r requirements.txt
+```
+
+| PyTorch wheel | 需要驱动 >= | 对应 CUDA |
+|---------------|------------|----------|
+| cu118         | 450.36     | 11.8     |
+| cu121         | 525.60     | 12.1     |
+| cu124         | 545.84     | 12.4     |
 
 ### 启动应用
 
@@ -201,9 +243,39 @@ Yolo Studio/
 
 ## CUDA 安装指南
 
-如需 GPU 加速训练，请确保安装：
-1. NVIDIA 驱动程序（推荐最新版本）
-2. CUDA Toolkit 11.8+ 或 12.x
-3. PyTorch with CUDA support
+### 打包版本（exe）用户
 
-应用内置了环境检测功能（设置 → 环境检测），可自动诊断 GPU/CUDA/PyTorch 兼容性并给出安装建议。
+打包版本默认使用 CPU 模式。如需 GPU 加速：
+
+1. 打开应用 → 菜单 → **环境** → 自动检测 GPU 和驱动
+2. 点击 **安装 PyTorch (cu121)** 按钮一键安装 CUDA 版 PyTorch
+3. 或手动执行：
+   ```bash
+   pip install torch torchvision --force-reinstall --index-url https://download.pytorch.org/whl/cu121
+   ```
+
+**驱动要求：** NVIDIA 驱动 >= 525.60（CUDA 12.0+）。查看驱动支持的 CUDA 版本：
+```bash
+nvidia-smi
+```
+
+### 从源码运行用户
+
+先安装 CUDA 版 PyTorch，再安装项目依赖：
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip install -r requirements.txt
+```
+PyTorch pip wheel 自带 CUDA 运行时，无需单独安装 CUDA Toolkit。
+
+### 版本兼容性
+
+| PyTorch wheel | 需要驱动 >= | 对应 CUDA |
+|---------------|------------|----------|
+| cu118         | 450.36     | 11.8     |
+| cu121         | 525.60     | 12.1     |
+| cu124         | 545.84     | 12.4     |
+
+PyTorch pip wheel 自带 CUDA 运行时，**无需单独安装 CUDA Toolkit**。
+
+应用内置了环境检测功能（菜单 → **环境**），可自动诊断 GPU/CUDA/PyTorch 兼容性并给出安装建议。

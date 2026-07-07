@@ -14,7 +14,7 @@ training:
   time: null            # max training hours (overrides epochs if set)
   batch: 16             # int or float 0.0-1.0 for AutoBatch
   imgsz: 640
-  device: "0"           # GPU id, "cpu", or list like "0,1"
+  device: null          # null = auto-detect (GPU if available, else CPU); "0" = GPU 0; "cpu" = CPU
   workers: 8
   patience: 100         # early-stop patience (Ultralytics default=100)
   save: true
