@@ -451,7 +451,12 @@ class AdvancedFeaturesPanel(QWidget):
 
         from gui.annotation_io import labels_dir_for_image_dir
 
+        root = Path(image_dir)
+        if (root / "images").is_dir():
+            image_dir = str(root / "images")
         labels_dir = labels_dir_for_image_dir(image_dir)
+        if (root / "labels").is_dir() and (root / "images").is_dir():
+            labels_dir = str(root / "labels")
         out_root = QFileDialog.getExistingDirectory(
             self, "选择增强输出目录（将创建 images/ 与 labels/）",
             str(Path(image_dir).parent),
