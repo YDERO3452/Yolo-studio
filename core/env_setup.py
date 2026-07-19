@@ -1748,17 +1748,17 @@ def format_diagnosis_summary(items: list[DiagnosisItem]) -> str:
 
 def format_diagnosis_html(items: list[DiagnosisItem]) -> str:
     """Format diagnosis items as HTML for display in env_check_dialog."""
-    colors = {"ok": "#30D158", "warning": "#FFD60A", "error": "#FF453A", "info": "#64D2FF"}
+    colors = {"ok": "#2E7D32", "warning": "#B86E00", "error": "#C62828", "info": "#2F6FED"}
     parts = []
     for item in items:
-        color = colors.get(item.level, "#8E8E93")
+        color = colors.get(item.level, "#777777")
         parts.append(f'<p><span style="color:{color}; font-weight:bold;">{item.title}</span></p>')
         if item.detail:
             for dl in item.detail.split("\n"):
-                parts.append(f'<p style="margin-left:12px; color:#98989D;">{dl}</p>')
+                parts.append(f'<p style="margin-left:12px; color:#555555;">{dl}</p>')
         if item.action:
             parts.append(
-                f'<p style="margin-left:12px; color:#64D2FF;">→ {item.action}</p>'
+                f'<p style="margin-left:12px; color:#2F6FED;">→ {item.action}</p>'
             )
     return "\n".join(parts)
 

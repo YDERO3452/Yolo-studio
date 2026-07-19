@@ -31,7 +31,7 @@ class NodeSheet(QWidget):
 
         self._accent_bar = QFrame()
         self._accent_bar.setObjectName("NodeSheetAccent")
-        self._accent_bar.setFixedWidth(5)
+        self._accent_bar.setFixedWidth(3)
         self._accent_bar.setStyleSheet(f"background: {self._accent}; border: none;")
         root.addWidget(self._accent_bar)
 

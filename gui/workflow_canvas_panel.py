@@ -56,10 +56,10 @@ MAIN_STAGES: tuple[StageSpec, ...] = (
     StageSpec("dataset", "数据", "导入 / 划分 / data.yaml", 3, "#2F6FED", "main"),
     StageSpec("annotate", "标注", "画框 · 队列 · 保存", 0, "#1B7F5A", "main"),
     StageSpec("train", "训练", "Ultralytics 训练与监控", 1, "#C47A00", "main"),
-    StageSpec("results", "结果", "权重与训练产物", 6, "#6B5B95", "main"),
-    StageSpec("infer", "推理", "图片 · 视频 · 摄像头", 2, "#B85C38", "main"),
+    StageSpec("results", "结果", "权重与训练产物", 6, "#7B6BB0", "main"),
+    StageSpec("infer", "推理", "图片 · 视频 · 摄像头", 2, "#C97856", "main"),
     StageSpec("export", "导出", "ONNX / 部署格式", 4, "#3D7EA6", "main"),
-    StageSpec("quality", "质检", "覆盖率与检查", 5, "#5A6A7A", "main"),
+    StageSpec("quality", "质检", "覆盖率与检查", 5, "#5B8FA8", "main"),
 )
 
 # Attached helpers — double-click opens action; never run in pipeline.
@@ -69,13 +69,13 @@ SUB_STAGES: tuple[StageSpec, ...] = (
     StageSpec("format", "格式转换", "YOLO / VOC / COCO", -1, "#2F6FED", "sub", "dataset", "dialog:format"),
     StageSpec("autolabel", "自动标注", "YOLO / LLM", -1, "#1B7F5A", "sub", "annotate", "focus:annotate"),
     StageSpec("namemap", "类别映射", "模型名 ↔ 项目类", -1, "#1B7F5A", "sub", "annotate", "dialog:namemap"),
-    StageSpec("stats", "统计", "类别分布与报告", -1, "#5A6A7A", "sub", "quality", "stage:5:0"),
-    StageSpec("flow", "流程", "批量与预设", -1, "#5A6A7A", "sub", "quality", "stage:5:1"),
-    StageSpec("env", "环境", "CUDA / PyTorch", -1, "#5C6B7A", "sub", "system", "dialog:env"),
+    StageSpec("stats", "统计", "类别分布与报告", -1, "#5B8FA8", "sub", "quality", "stage:5:0"),
+    StageSpec("flow", "流程", "批量与预设", -1, "#5B8FA8", "sub", "quality", "stage:5:1"),
+    StageSpec("env", "环境", "CUDA / PyTorch", -1, "#6B8CAD", "sub", "system", "dialog:env"),
 )
 
 UTILITY_STAGES: tuple[StageSpec, ...] = (
-    StageSpec("system", "系统", "环境与本机配置", -1, "#5C6B7A", "utility", None, "dialog:env"),
+    StageSpec("system", "系统", "环境与本机配置", -1, "#6B8CAD", "utility", None, "dialog:env"),
 )
 
 ALL_STAGES: tuple[StageSpec, ...] = MAIN_STAGES + UTILITY_STAGES + SUB_STAGES
@@ -212,10 +212,10 @@ class WorkflowNode(QGraphicsRectItem):
         self.setPen(QPen(QColor(Theme.BORDER), 1.2))
         self.setCursor(Qt.CursorShape.OpenHandCursor)
 
-        accent_w = 3 if kind == "sub" else 4
+        accent_w = 3 if kind == "sub" else 3
         accent_color = QColor(spec.accent)
-        if kind == "sub":
-            accent_color.setAlpha(160)
+        if kind != "main":
+            accent_color.setAlpha(180)
         self._accent = QGraphicsRectItem(0, 0, accent_w, h, self)
         self._accent.setBrush(QBrush(accent_color))
         self._accent.setPen(QPen(Qt.PenStyle.NoPen))

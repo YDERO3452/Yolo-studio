@@ -8,13 +8,13 @@ from PyQt6.QtWidgets import QApplication
 
 
 class Theme:
-    BG = "#F0F0F0"
-    RAIL = "#E8E8E8"
-    SURFACE = "#F7F7F7"
+    BG = "#F5F5F5"
+    RAIL = "#F0F0F0"
+    SURFACE = "#FAFAFA"
     SURFACE_2 = "#FFFFFF"
-    SURFACE_3 = "#EBEBEB"
-    BORDER = "#C8C8C8"
-    BORDER_STRONG = "#A8A8A8"
+    SURFACE_3 = "#EEEEEE"
+    BORDER = "#D0D0D0"
+    BORDER_STRONG = "#B8B8B8"
     TEXT = "#222222"
     TEXT_MUTED = "#555555"
     TEXT_DIM = "#777777"
@@ -28,6 +28,8 @@ class Theme:
     # Match white panels — no gray stage slab that reads as dark-mode leftover
     CANVAS_BG = "#FFFFFF"
     CANVAS_HINT = "#555555"
+    SCROLL_HANDLE = "#D0D0D0"
+    SCROLL_HANDLE_HOVER = "#BDBDBD"
 
 
 def apply_light_palette(app: QApplication | None = None) -> None:
@@ -70,7 +72,7 @@ def apply_light_palette(app: QApplication | None = None) -> None:
     p.setColor(QPalette.ColorRole.Midlight, QColor(Theme.SURFACE_3))
     p.setColor(QPalette.ColorRole.Mid, QColor(Theme.BORDER))
     p.setColor(QPalette.ColorRole.Dark, QColor(Theme.BORDER_STRONG))
-    p.setColor(QPalette.ColorRole.Shadow, QColor("#808080"))
+    p.setColor(QPalette.ColorRole.Shadow, QColor(Theme.BORDER_STRONG))
 
     for role in (
         QPalette.ColorRole.WindowText,
@@ -262,7 +264,7 @@ def build_stylesheet() -> str:
         border-color: {Theme.BORDER_STRONG};
     }}
     QPushButton:pressed {{
-        background: #D8D8D8;
+        background: {Theme.SURFACE_3};
     }}
     QPushButton:disabled {{
         color: {Theme.TEXT_DIM};
@@ -625,7 +627,7 @@ def build_stylesheet() -> str:
         background: {Theme.SURFACE};
     }}
     QSplitter::handle {{
-        background: {Theme.BORDER};
+        background: {Theme.SURFACE_3};
     }}
     QScrollBar:vertical {{
         background: {Theme.BG};
@@ -633,12 +635,17 @@ def build_stylesheet() -> str:
         margin: 0;
     }}
     QScrollBar::handle:vertical {{
-        background: #B8B8B8;
+        background: {Theme.SCROLL_HANDLE};
         border-radius: 0px;
         min-height: 28px;
     }}
     QScrollBar::handle:vertical:hover {{
-        background: #9A9A9A;
+        background: {Theme.SCROLL_HANDLE_HOVER};
+    }}
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+        background: transparent;
+        height: 0px;
     }}
     QScrollBar:horizontal {{
         background: {Theme.BG};
@@ -646,9 +653,17 @@ def build_stylesheet() -> str:
         margin: 0;
     }}
     QScrollBar::handle:horizontal {{
-        background: #B8B8B8;
+        background: {Theme.SCROLL_HANDLE};
         border-radius: 0px;
         min-width: 28px;
+    }}
+    QScrollBar::handle:horizontal:hover {{
+        background: {Theme.SCROLL_HANDLE_HOVER};
+    }}
+    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal,
+    QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+        background: transparent;
+        width: 0px;
     }}
     QProgressBar {{
         background: {Theme.SURFACE_2};
