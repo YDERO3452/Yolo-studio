@@ -82,7 +82,9 @@ class WorkflowOpsMixin:
 
     def _on_workflow_pipeline_finished(self, ok: bool, summary: str) -> None:
         self.workflow_panel.set_running_ui(False)
-        for key, node in getattr(self.workflow_panel, "nodes", {}).items():
+        scene = getattr(self.workflow_panel, "scene", None)
+        nodes = getattr(scene, "nodes", {}) if scene is not None else {}
+        for key, node in nodes.items():
             if getattr(node, "status", "") == "pending":
                 self.workflow_panel.set_node_status(key, "skipped", "已跳过")
         self.workflow_panel.append_log(("✓ " if ok else "✗ ") + summary)
@@ -273,14 +275,14 @@ class WorkflowOpsMixin:
             model_path = self.inference_panel.model_path_edit.text().strip()
         if model_path and os.path.isfile(model_path):
             try:
-                self.inference_panel.load_model_from_path(model_path)
+                self.inference_panel.load_model_from_path(model_path, quiet=True)
             except Exception:
                 if hasattr(self.inference_panel, "load_model"):
-                    self.inference_panel.load_model()
+                    self.inference_panel.load_model(quiet=True)
         if not self.inference_panel.inferencer:
             # Try load_model which reads the edit box
             try:
-                self.inference_panel.load_model()
+                self.inference_panel.load_model(quiet=True)
             except Exception:
                 pass
         if not self.inference_panel.inferencer:
@@ -320,9 +322,9 @@ class WorkflowOpsMixin:
         if hasattr(self.export_panel, "model_path_edit"):
             model_path = self.export_panel.model_path_edit.text().strip()
         if model_path and os.path.isfile(model_path):
-            self.export_panel.load_model_from_path(model_path)
+            self.export_panel.load_model_from_path(model_path, quiet=True)
         elif not self.export_panel.exporter:
-            self.export_panel.load_model()
+            self.export_panel.load_model(quiet=True)
 
         def _on_export_done(result: dict) -> None:
             try:

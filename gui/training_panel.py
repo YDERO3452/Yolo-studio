@@ -1720,13 +1720,14 @@ class TrainingPanel(QWidget):
 
         # Start worker thread
         self._cleanup_worker()
+        self._workflow_mode = workflow_mode
         self.worker = TrainingWorker(self.trainer, args["data_yaml"], **kwargs)
         self.worker.progress.connect(self.on_progress)
         self.worker.finished.connect(self.on_finished)
         self.worker.start()
-        return True
-        # Start polling epoch metrics from worker
+        # Poll epoch metrics from worker on the GUI thread
         self._epoch_timer.start()
+        return True
 
     def _cleanup_worker(self):
         if self.worker is not None:
@@ -1875,20 +1876,23 @@ class TrainingPanel(QWidget):
                 if os.path.isfile(_best):
                     best_pt = _best
 
-            # Show completion dialog with quick actions
-            dlg = TrainingCompleteDialog(save_dir, best_pt, self)
-            dlg.exec()
+            # Show completion dialog with quick actions (skip in workflow mode)
+            if not getattr(self, "_workflow_mode", False):
+                dlg = TrainingCompleteDialog(save_dir, best_pt, self)
+                dlg.exec()
 
-            if dlg.action and best_pt:
-                self.model_ready.emit(best_pt, dlg.action)
+                if dlg.action and best_pt:
+                    self.model_ready.emit(best_pt, dlg.action)
         else:
             self.log_text.append(f"\n训练失败: {result.get('error', '未知错误')}")
             # Still show whatever chart data we collected
             if self._live_logs.get("epochs"):
                 self.training_chart.update_chart(self._live_logs)
                 self.chart_tabs.setCurrentWidget(self.training_chart)
-            QMessageBox.critical(self, "训练失败", result.get("error", "未知错误"))
+            if not getattr(self, "_workflow_mode", False):
+                QMessageBox.critical(self, "训练失败", result.get("error", "未知错误"))
 
+        self._workflow_mode = False
         self.training_finished.emit(result)
 
     def _load_training_logs(self, project_dir: str) -> bool:

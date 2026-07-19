@@ -212,10 +212,10 @@ class ExportPanel(QWidget):
         """Set the model path from external source (e.g. training panel)."""
         self.model_path_edit.setText(path)
 
-    def load_model_from_path(self, path: str):
+    def load_model_from_path(self, path: str, *, quiet: bool = False):
         """Set model path and automatically load the model."""
         self.model_path_edit.setText(path)
-        self.load_model()
+        self.load_model(quiet=quiet)
 
     def _refresh_recent_models(self):
         """Scan runs/ directory for recently trained best.pt files."""
@@ -265,19 +265,24 @@ class ExportPanel(QWidget):
         if path:
             self.model_path_edit.setText(path)
 
-    def load_model(self):
+    def load_model(self, *, quiet: bool = False):
         model_path = self.model_path_edit.text()
         if not model_path or not os.path.exists(model_path):
-            QMessageBox.warning(self, "错误", "请选择有效的模型文件")
-            return
+            if not quiet:
+                QMessageBox.warning(self, "错误", "请选择有效的模型文件")
+            return False
 
         try:
             self.exporter = ModelExporter(model_path)
             self.exporter.load_model()
             self.status_text.append(f"模型加载成功: {model_path}")
-            QMessageBox.information(self, "成功", "模型加载成功!")
+            if not quiet:
+                QMessageBox.information(self, "成功", "模型加载成功!")
+            return True
         except Exception as e:
-            QMessageBox.critical(self, "加载失败", str(e))
+            if not quiet:
+                QMessageBox.critical(self, "加载失败", str(e))
+            return False
 
     def _check_cuda_for_half(self):
         """Disable FP16 checkbox if CUDA is not available (CPU-only torch or no GPU)."""

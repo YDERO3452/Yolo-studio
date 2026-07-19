@@ -165,6 +165,8 @@ class InferenceWorker(QThread):
                 infer_elapsed = max(time.perf_counter() - infer_start, 1e-6)
 
                 # --- Post-processing ---
+                if not results.get("results"):
+                    continue
                 result0 = results["results"][0]
                 annotated = result0.plot().copy()  # copy to make it writable
                 detections = self.inferencer.get_detections(results["results"])
@@ -260,12 +262,16 @@ class BatchInferenceWorker(QThread):
                 elapsed = result["elapsed"]
                 detections = self.inferencer.get_detections(results)
 
-                # Save annotated image
+                # Save annotated image (plot() returns BGR; Unicode-safe write)
                 if self.output_dir:
+                    if not results:
+                        continue
                     annotated = results[0].plot().copy()
                     out_name = os.path.splitext(os.path.basename(img_path))[0] + "_det.jpg"
                     out_path = os.path.join(self.output_dir, out_name)
-                    cv2.imwrite(out_path, cv2.cvtColor(annotated, cv2.COLOR_RGB2BGR))
+                    from core.image_utils import write_image
+
+                    write_image(out_path, annotated)
 
                 self.progress.emit(i + 1, total, os.path.basename(img_path))
                 self.result_ready.emit(img_path, detections, elapsed)
@@ -704,10 +710,10 @@ class InferencePanel(QWidget):
         """Set the model path from external source (e.g. training panel)."""
         self.model_path_edit.setText(path)
 
-    def load_model_from_path(self, path: str):
+    def load_model_from_path(self, path: str, *, quiet: bool = False):
         """Set model path and automatically load the model."""
         self.model_path_edit.setText(path)
-        self.load_model()
+        self.load_model(quiet=quiet)
 
     def _refresh_recent_models(self):
         """Scan runs/ directory for recently trained best.pt files."""
@@ -784,12 +790,13 @@ class InferencePanel(QWidget):
         # Extract leading number: "320 (最快)" → 320
         return int(text.split()[0])
 
-    def load_model(self):
+    def load_model(self, *, quiet: bool = False):
         from core.inference import YOLOInference
         model_path = self.model_path_edit.text()
         if not model_path or not os.path.exists(model_path):
-            QMessageBox.warning(self, "错误", "请选择有效的模型文件")
-            return
+            if not quiet:
+                QMessageBox.warning(self, "错误", "请选择有效的模型文件")
+            return False
 
         try:
             self.inferencer = YOLOInference(self.config.config if self.config else None)
@@ -821,13 +828,17 @@ class InferencePanel(QWidget):
                 self.device_info_label.setText("CPU 模式  FP32")
                 self.device_info_label.setStyleSheet(f"color: {Theme.WARNING}; font-size: 11px;")
 
-            QMessageBox.information(
-                self, "成功",
-                f"模型加载成功: {model_path}\n"
-                f"设备: {dev_info['device']}  FP{'16' if dev_info['half'] else '32'}  分辨率: {dev_info['imgsz']}"
-            )
+            if not quiet:
+                QMessageBox.information(
+                    self, "成功",
+                    f"模型加载成功: {model_path}\n"
+                    f"设备: {dev_info['device']}  FP{'16' if dev_info['half'] else '32'}  分辨率: {dev_info['imgsz']}"
+                )
+            return True
         except Exception as e:
-            QMessageBox.critical(self, "加载失败", str(e))
+            if not quiet:
+                QMessageBox.critical(self, "加载失败", str(e))
+            return False
 
     def get_predict_args(self) -> dict:
         return {
@@ -853,7 +864,9 @@ class InferencePanel(QWidget):
             result = self.inferencer.predict_image(path, **self.get_predict_args())
             results = result["results"]
 
-            # Display annotated image
+            # Display annotated image (plot() already returns BGR)
+            if not results:
+                raise RuntimeError("模型未返回检测结果")
             annotated = results[0].plot().copy()
             self.display_frame(annotated)
 
@@ -1115,12 +1128,14 @@ class InferencePanel(QWidget):
                 QMessageBox.warning(self, "错误", "请选择有效的图片文件夹")
             return False
 
-        # Collect images
+        # Collect images (recurse into train/val after dataset split)
         extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
-        image_paths = sorted([
-            os.path.join(folder, f) for f in os.listdir(folder)
-            if os.path.splitext(f)[1].lower() in extensions
-        ])
+        image_paths = []
+        for root, _dirs, files in os.walk(folder):
+            for name in files:
+                if os.path.splitext(name)[1].lower() in extensions:
+                    image_paths.append(os.path.join(root, name))
+        image_paths = sorted(image_paths)
 
         if not image_paths:
             if not workflow_mode:
