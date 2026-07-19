@@ -1,4 +1,4 @@
-"""Capture YOLO Studio workspaces for visual regression review."""
+"""Capture YOLO Studio workflow canvas and node stage views."""
 
 from __future__ import annotations
 
@@ -22,14 +22,16 @@ from PyQt6.QtWidgets import QApplication  # noqa: E402
 from gui.main_window import MainWindow  # noqa: E402
 from gui.project_panel import ProjectPanel  # noqa: E402
 
-WORKSPACE_NAMES = (
-    "annotate",
-    "train",
-    "inference",
-    "dataset",
-    "export",
-    "quality",
-    "results",
+# (stage_index or None for home canvas, filename slug)
+VIEWS = (
+    (None, "workflow"),
+    (0, "annotate"),
+    (3, "dataset"),
+    (1, "train"),
+    (6, "results"),
+    (2, "inference"),
+    (4, "export"),
+    (5, "quality"),
 )
 
 
@@ -48,7 +50,6 @@ def capture_workspaces(output_dir: Path, width: int, height: int) -> list[Path]:
                 window = MainWindow()
                 window.resize(width, height)
 
-                # Exercise every page without reading models or project state from the repository.
                 window.current_project = {"name": "UI Preview", "root": temp_dir}
                 window.image_list = ["sample-001.jpg", "sample-002.jpg", "sample-003.jpg"]
                 window._update_project_gate()
@@ -56,11 +57,14 @@ def capture_workspaces(output_dir: Path, width: int, height: int) -> list[Path]:
                 QTest.qWait(180)
 
                 captured: list[Path] = []
-                for index, name in enumerate(WORKSPACE_NAMES):
-                    window._switch_workspace(index)
+                for order, (stage, name) in enumerate(VIEWS):
+                    if stage is None:
+                        window._return_to_workflow()
+                    else:
+                        window._open_stage(stage)
                     app.processEvents()
                     QTest.qWait(80)
-                    path = output_dir / f"{index:02d}-{name}-{width}x{height}.png"
+                    path = output_dir / f"{order:02d}-{name}-{width}x{height}.png"
                     if not window.grab().save(str(path), "PNG"):
                         raise RuntimeError(f"Failed to save screenshot: {path}")
                     captured.append(path)

@@ -1342,13 +1342,13 @@ class TrainingPanel(QWidget):
         font_path = self.font_path_edit.text().strip()
         if font_path and os.path.isfile(font_path):
             self.font_status_label.setText(f"已选择: {os.path.basename(font_path)}")
-            self.font_status_label.setStyleSheet("color: #3fb950; font-size: 11px;")
+            self.font_status_label.setStyleSheet(f"color: {Theme.SUCCESS}; font-size: 11px;")
         elif font_path:
             self.font_status_label.setText("字体文件不存在")
-            self.font_status_label.setStyleSheet("color: #f85149; font-size: 11px;")
+            self.font_status_label.setStyleSheet(f"color: {Theme.DANGER}; font-size: 11px;")
         else:
             self.font_status_label.setText("未指定字体 — 将跳过字体注入")
-            self.font_status_label.setStyleSheet("color: #8b949e; font-size: 11px;")
+            self.font_status_label.setStyleSheet(f"color: {Theme.TEXT_MUTED}; font-size: 11px;")
 
     @staticmethod
     def _setup_font_for_training(font_path: str):
@@ -1643,17 +1643,23 @@ class TrainingPanel(QWidget):
             "exist_ok": self.exist_ok_check.isChecked(),
         }
 
-    def start_training(self):
-        """Start the training process."""
+    def start_training(self, *, workflow_mode: bool = False):
+        """Start the training process.
+
+        workflow_mode: skip interactive warning dialogs (auto-continue) for
+        headless workflow canvas execution.
+        """
         args = self.get_training_args()
 
         if not args["model"]:
-            QMessageBox.warning(self, "错误", "请先选择一个预训练模型或输入自定义模型路径")
-            return
+            if not workflow_mode:
+                QMessageBox.warning(self, "错误", "请先选择一个预训练模型或输入自定义模型路径")
+            return False
 
         if not args["data_yaml"] or not os.path.exists(args["data_yaml"]):
-            QMessageBox.warning(self, "错误", "请先选择有效的 data.yaml 文件")
-            return
+            if not workflow_mode:
+                QMessageBox.warning(self, "错误", "请先选择有效的 data.yaml 文件")
+            return False
 
         # Validate dataset labels before training
         is_fatal, warnings, errors = self._validate_dataset_before_training(args["data_yaml"])
@@ -1662,16 +1668,17 @@ class TrainingPanel(QWidget):
             msg = "数据集验证失败，训练已取消：\n\n" + "\n".join(f"  • {e}" for e in errors)
             if warnings:
                 msg += "\n\n警告：\n" + "\n".join(f"  • {w}" for w in warnings)
-            QMessageBox.critical(self, "数据集错误", msg)
-            return
+            if not workflow_mode:
+                QMessageBox.critical(self, "数据集错误", msg)
+            return False
 
-        if warnings:
+        if warnings and not workflow_mode:
             msg = "数据集验证发现以下问题，建议检查后再训练：\n\n" + "\n".join(f"  • {w}" for w in warnings)
             reply = QMessageBox.warning(self, "数据集警告", msg,
                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                                         QMessageBox.StandardButton.No)
             if reply == QMessageBox.StandardButton.No:
-                return
+                return False
 
         # Inject font to avoid ultralytics downloading Arial.Unicode.ttf from internet
         font_path = self.font_path_edit.text().strip()
@@ -1685,8 +1692,9 @@ class TrainingPanel(QWidget):
         try:
             self.trainer.load_model(args["model"])
         except Exception as e:
-            QMessageBox.critical(self, "模型加载失败", str(e))
-            return
+            if not workflow_mode:
+                QMessageBox.critical(self, "模型加载失败", str(e))
+            return False
 
         # Prepare kwargs — remove keys that are handled separately
         kwargs = {k: v for k, v in args.items() if k not in ("model", "data_yaml")}
@@ -1716,7 +1724,7 @@ class TrainingPanel(QWidget):
         self.worker.progress.connect(self.on_progress)
         self.worker.finished.connect(self.on_finished)
         self.worker.start()
-
+        return True
         # Start polling epoch metrics from worker
         self._epoch_timer.start()
 
@@ -1808,8 +1816,8 @@ class TrainingPanel(QWidget):
             patience = self.patience_spin.value()
             if patience > 0:
                 remaining = patience - self._no_improve_count
-                color = "#3fb950" if self._no_improve_count == 0 else (
-                    "#f85149" if remaining < patience * 0.3 else "#d29922"
+                color = Theme.SUCCESS if self._no_improve_count == 0 else (
+                    Theme.DANGER if remaining < patience * 0.3 else Theme.WARNING
                 )
                 self.early_stop_label.setText(
                     f"Best mAP: {self._best_map:.4f} @ epoch {self._best_map_epoch}  |  "
@@ -1842,7 +1850,9 @@ class TrainingPanel(QWidget):
                 self.early_stop_label.setText(
                     f"训练完成 — Best mAP50-95: {self._best_map:.4f} @ epoch {self._best_map_epoch}"
                 )
-                self.early_stop_label.setStyleSheet("color: #3fb950; font-size: 12px; padding: 4px 0; font-weight: bold;")
+                self.early_stop_label.setStyleSheet(
+                    f"color: {Theme.SUCCESS}; font-size: 12px; padding: 4px 0; font-weight: bold;"
+                )
                 self.early_stop_label.setVisible(True)
 
             save_dir = result.get("save_dir") or "unknown"

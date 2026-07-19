@@ -11,6 +11,7 @@ from PyQt6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap, QPolygon
 from PyQt6.QtWidgets import QWidget
 
 from core.annotation import ShapeType
+from gui.theme import Theme
 
 
 class CanvasMode(str, Enum):
@@ -335,11 +336,11 @@ class AnnotationCanvas(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor(32, 34, 34))
+        painter.fillRect(self.rect(), QColor(Theme.CANVAS_BG))
 
         if not self.display_pixmap:
-            painter.setPen(QColor(120, 120, 120))
-            painter.setFont(QFont("Microsoft YaHei", 14))
+            painter.setPen(QColor(Theme.CANVAS_HINT))
+            painter.setFont(QFont("Microsoft YaHei UI", 13))
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter,
                              "Ctrl+O 打开图片目录开始标注")
             painter.end()

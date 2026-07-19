@@ -40,7 +40,7 @@ from core.env_setup import (
     get_pytorch_install_commands,
     get_pytorch_install_plan,
 )
-from gui.theme import build_stylesheet
+from gui.theme import Theme, build_stylesheet
 
 
 class _EnvDetectWorker(QThread):
@@ -252,7 +252,7 @@ class EnvironmentCheckDialog(QDialog):
 
         if env is None:
             self.diag_text.setHtml(
-                '<p style="color:#FF453A;">环境检测失败，请检查日志。</p>'
+                f'<p style="color:{Theme.DANGER};">环境检测失败，请检查日志。</p>'
             )
             return
 

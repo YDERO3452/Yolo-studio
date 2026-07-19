@@ -9,6 +9,7 @@ import numpy as np
 from PyQt6.QtCore import QMutex, QSize, Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QIcon, QImage, QPixmap
 from PyQt6.QtWidgets import (
+    QAbstractSpinBox,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -28,6 +29,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from gui.theme import Theme
 from gui.ui_components import StatusPill
 
 
@@ -282,6 +284,8 @@ class BatchInferenceWorker(QThread):
 class InferencePanel(QWidget):
     """Panel for running YOLO inference."""
 
+    batch_inference_finished = pyqtSignal(int)  # total processed
+
     def __init__(self, config_manager=None, parent=None):
         super().__init__(parent)
         self.config = config_manager
@@ -304,13 +308,13 @@ class InferencePanel(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
 
         # Keep model selection and execution controls on separate rows so the
         # toolbar remains readable when the workspace is narrower than 1600px.
         model_row = QHBoxLayout()
-        model_row.setSpacing(8)
+        model_row.setSpacing(10)
 
         model_label = QLabel("模型")
         model_label.setObjectName("MutedText")
@@ -353,7 +357,7 @@ class InferencePanel(QWidget):
         layout.addLayout(model_row)
 
         control_row = QHBoxLayout()
-        control_row.setSpacing(8)
+        control_row.setSpacing(10)
 
         params_label = QLabel("推理参数")
         params_label.setObjectName("MutedText")
@@ -365,6 +369,7 @@ class InferencePanel(QWidget):
         self.conf_spin.setValue(0.25)
         self.conf_spin.setDecimals(2)
         self.conf_spin.setFixedWidth(72)
+        self.conf_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         control_row.addWidget(self.conf_spin)
 
         control_row.addWidget(QLabel("IoU"))
@@ -373,6 +378,7 @@ class InferencePanel(QWidget):
         self.iou_spin.setValue(0.7)
         self.iou_spin.setDecimals(2)
         self.iou_spin.setFixedWidth(72)
+        self.iou_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         control_row.addWidget(self.iou_spin)
 
         control_row.addWidget(QLabel("分辨率"))
@@ -389,7 +395,7 @@ class InferencePanel(QWidget):
         control_row.addWidget(self.half_check)
 
         self.device_info_label = QLabel("设备: 检测中...")
-        self.device_info_label.setStyleSheet("color: #8b949e; font-size: 11px;")
+        self.device_info_label.setStyleSheet(f"color: {Theme.TEXT_MUTED}; font-size: 11px;")
         control_row.addWidget(self.device_info_label)
         control_row.addStretch()
 
@@ -507,7 +513,7 @@ class InferencePanel(QWidget):
         btn_row.addStretch()
 
         self.time_label = QLabel("00:00 / 00:00")
-        self.time_label.setStyleSheet("color: #8b949e; font-size: 11px;")
+        self.time_label.setStyleSheet(f"color: {Theme.TEXT_MUTED}; font-size: 11px;")
         btn_row.addWidget(self.time_label)
         vc_layout.addLayout(btn_row)
 
@@ -758,15 +764,15 @@ class InferencePanel(QWidget):
             gpu = detection.gpus[0]
             vram_gb = gpu.vram_total_mb / 1024 if gpu.vram_total_mb else 0
             self.device_info_label.setText(f"GPU: {gpu.name} ({vram_gb:.1f}GB)")
-            self.device_info_label.setStyleSheet("color: #3fb950; font-size: 11px;")
+            self.device_info_label.setStyleSheet(f"color: {Theme.SUCCESS}; font-size: 11px;")
         elif detection.torch_version:
             self.device_info_label.setText("CUDA 不可用，将使用 CPU")
-            self.device_info_label.setStyleSheet("color: #f85149; font-size: 11px;")
+            self.device_info_label.setStyleSheet(f"color: {Theme.DANGER}; font-size: 11px;")
             self.half_check.setChecked(False)
             self.half_check.setEnabled(False)
         else:
             self.device_info_label.setText("PyTorch 未安装")
-            self.device_info_label.setStyleSheet("color: #f85149; font-size: 11px;")
+            self.device_info_label.setStyleSheet(f"color: {Theme.DANGER}; font-size: 11px;")
             self.half_check.setChecked(False)
             self.half_check.setEnabled(False)
 
@@ -808,10 +814,10 @@ class InferencePanel(QWidget):
                 self.device_info_label.setText(
                     f"GPU: {gpu_name}  |  {dev_info['device']}  FP{'16' if dev_info['half'] else '32'}"
                 )
-                self.device_info_label.setStyleSheet("color: #3fb950; font-size: 11px;")
+                self.device_info_label.setStyleSheet(f"color: {Theme.SUCCESS}; font-size: 11px;")
             else:
                 self.device_info_label.setText("CPU 模式  FP32")
-                self.device_info_label.setStyleSheet("color: #d29922; font-size: 11px;")
+                self.device_info_label.setStyleSheet(f"color: {Theme.WARNING}; font-size: 11px;")
 
             QMessageBox.information(
                 self, "成功",
@@ -1095,15 +1101,17 @@ class InferencePanel(QWidget):
         if path:
             self.batch_output_edit.setText(path)
 
-    def start_batch_inference(self):
+    def start_batch_inference(self, *, workflow_mode: bool = False):
         if not self.inferencer:
-            QMessageBox.warning(self, "错误", "请先加载模型")
-            return
+            if not workflow_mode:
+                QMessageBox.warning(self, "错误", "请先加载模型")
+            return False
 
         folder = self.batch_folder_edit.text()
         if not folder or not os.path.exists(folder):
-            QMessageBox.warning(self, "错误", "请选择有效的图片文件夹")
-            return
+            if not workflow_mode:
+                QMessageBox.warning(self, "错误", "请选择有效的图片文件夹")
+            return False
 
         # Collect images
         extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
@@ -1113,8 +1121,9 @@ class InferencePanel(QWidget):
         ])
 
         if not image_paths:
-            QMessageBox.warning(self, "错误", "文件夹中没有图片")
-            return
+            if not workflow_mode:
+                QMessageBox.warning(self, "错误", "文件夹中没有图片")
+            return False
 
         output_dir = self.batch_output_edit.text()
         if output_dir:
@@ -1139,7 +1148,7 @@ class InferencePanel(QWidget):
         self.batch_worker.result_ready.connect(self.on_batch_result)
         self.batch_worker.finished.connect(self.on_batch_finished)
         self.batch_worker.start()
-
+        return True
     def stop_batch_inference(self):
         if self.batch_worker:
             self.batch_worker.stop()
@@ -1166,6 +1175,7 @@ class InferencePanel(QWidget):
         self.batch_status_label.setText(f"完成! 共处理 {total} 张图片")
         self.batch_results_text.append(f"\n批量推理完成! 共处理 {total} 张图片")
         self._cleanup_batch_worker()
+        self.batch_inference_finished.emit(total)
 
     def export_batch_results(self):
         if not self.batch_results:

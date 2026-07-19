@@ -1,27 +1,29 @@
-"""Application theme for the YOLO Studio desktop workbench."""
+"""Application theme for YOLO Studio — LabelImg-style light workbench."""
 
 from __future__ import annotations
 
 
 class Theme:
-    BG = "#121416"
-    RAIL = "#0E1012"
-    SURFACE = "#181B1E"
-    SURFACE_2 = "#202429"
-    SURFACE_3 = "#292F35"
-    BORDER = "#2D3339"
-    BORDER_STRONG = "#414950"
-    TEXT = "#E7E9EC"
-    TEXT_MUTED = "#A8AFB7"
-    TEXT_DIM = "#727A83"
-    ACCENT = "#4F7FAF"
-    ACCENT_HOVER = "#5B8CBB"
-    ACCENT_DARK = "#365F87"
-    SUCCESS = "#659A75"
-    WARNING = "#C49347"
-    DANGER = "#C4605C"
-    SELECTION = "#203247"
-    CANVAS_BG = "#151719"
+    BG = "#E8E8E8"
+    RAIL = "#DCDCDC"
+    SURFACE = "#F2F2F2"
+    SURFACE_2 = "#FFFFFF"
+    SURFACE_3 = "#E0E0E0"
+    BORDER = "#B8B8B8"
+    BORDER_STRONG = "#909090"
+    TEXT = "#222222"
+    TEXT_MUTED = "#555555"
+    TEXT_DIM = "#777777"
+    ACCENT = "#2F6FED"
+    ACCENT_HOVER = "#1F5AD6"
+    ACCENT_DARK = "#1847B0"
+    SUCCESS = "#2E7D32"
+    WARNING = "#B86E00"
+    DANGER = "#C62828"
+    SELECTION = "#D6E4FF"
+    # Mid gray — matches light chrome (LabelImg), not pitch-black
+    CANVAS_BG = "#7A7A7A"
+    CANVAS_HINT = "#F0F0F0"
 
 
 def build_stylesheet() -> str:
@@ -48,7 +50,7 @@ def build_stylesheet() -> str:
     }}
     QToolTip {{
         color: {Theme.TEXT};
-        background: {Theme.SURFACE_3};
+        background: {Theme.SURFACE_2};
         border: 1px solid {Theme.BORDER_STRONG};
         padding: 4px 6px;
     }}
@@ -63,24 +65,24 @@ def build_stylesheet() -> str:
         max-height: 34px;
     }}
     QPushButton#WorkspaceTab {{
-        background: {Theme.SURFACE_2};
-        color: {Theme.TEXT_MUTED};
+        background: {Theme.SURFACE_3};
+        color: {Theme.TEXT};
         border: 1px solid {Theme.BORDER};
         border-bottom: none;
-        border-radius: 6px 6px 0 0;
-        padding: 7px 18px;
-        min-width: 70px;
-        font-weight: 700;
+        border-radius: 0px;
+        padding: 4px 14px;
+        min-width: 56px;
+        font-size: 13px;
     }}
     QPushButton#WorkspaceTab:hover {{
         color: {Theme.TEXT};
-        background: {Theme.SURFACE_3};
+        background: {Theme.SURFACE_2};
     }}
     QPushButton#WorkspaceTab:checked {{
-        color: {Theme.TEXT};
-        background: #111820;
+        color: #FFFFFF;
+        background: {Theme.ACCENT};
         border-color: {Theme.ACCENT};
-        border-bottom: 2px solid {Theme.ACCENT};
+        font-weight: 600;
     }}
     QWidget#ToolRail, QWidget#NavRail, QScrollArea#NavRailScroll {{
         background: {Theme.RAIL};
@@ -100,6 +102,19 @@ def build_stylesheet() -> str:
         background: transparent;
         border-bottom: 1px solid {Theme.BORDER};
     }}
+    QWidget#StageOverlayDim {{
+        background: rgba(40, 40, 40, 90);
+    }}
+    QWidget#StageOverlay {{
+        background: {Theme.SURFACE_2};
+        border-left: 1px solid {Theme.BORDER};
+    }}
+    QWidget#StageHost {{
+        background: {Theme.SURFACE_2};
+    }}
+    QWidget#WorkspacePage {{
+        background: {Theme.SURFACE_2};
+    }}
     QWidget#AnnotationControlBar {{
         background: {Theme.SURFACE};
         border-bottom: 1px solid {Theme.BORDER};
@@ -116,16 +131,16 @@ def build_stylesheet() -> str:
     QWidget#Card, QFrame#Card {{
         background: {Theme.SURFACE_2};
         border: 1px solid {Theme.BORDER};
-        border-radius: 6px;
+        border-radius: 0px;
     }}
     QLabel#BrandTitle, QLabel#PageTitle {{
         color: {Theme.TEXT};
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 600;
     }}
     QLabel#PanelTitle {{
         color: {Theme.TEXT};
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 600;
     }}
     QLabel#BrandSubtitle, QLabel#MutedText {{
@@ -134,68 +149,68 @@ def build_stylesheet() -> str:
     }}
     QLabel#SectionTitle {{
         color: {Theme.TEXT};
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 600;
-        padding: 0 0 4px 0;
+        padding: 0 0 2px 0;
     }}
     QLabel#StatusPill {{
         color: {Theme.TEXT_MUTED};
-        background: {Theme.SURFACE_2};
+        background: {Theme.SURFACE_3};
         border: 1px solid {Theme.BORDER};
-        border-radius: 4px;
-        padding: 2px 7px;
+        border-radius: 0px;
+        padding: 1px 6px;
         font-size: 11px;
     }}
     QLabel#StatusPill[variant="accent"] {{
-        color: #9FC0DE;
-        background: rgba(79, 127, 175, 0.14);
-        border-color: #3F668D;
+        color: {Theme.ACCENT_DARK};
+        background: {Theme.SELECTION};
+        border-color: #9BB8F0;
         font-weight: 600;
     }}
     QLabel#StatusPill[variant="success"] {{
-        color: #91B99D;
-        background: rgba(101, 154, 117, 0.14);
-        border-color: #4C7358;
+        color: {Theme.SUCCESS};
+        background: #E8F5E9;
+        border-color: #A5D6A7;
         font-weight: 600;
     }}
     QLabel#StatusPill[variant="warning"] {{
-        color: #D6B77E;
-        background: rgba(196, 147, 71, 0.14);
-        border-color: #806432;
+        color: {Theme.WARNING};
+        background: #FFF3E0;
+        border-color: #FFCC80;
         font-weight: 600;
     }}
     QLabel#ClassCurrent {{
         border: 1px solid {Theme.BORDER};
-        border-radius: 4px;
-        padding: 2px 7px;
+        border-radius: 0px;
+        padding: 2px 6px;
         font-size: 11px;
         font-weight: 600;
     }}
     QLabel#PreviewSurface {{
         background: {Theme.CANVAS_BG};
         border: 1px solid {Theme.BORDER};
-        border-radius: 6px;
-        color: {Theme.TEXT_MUTED};
+        border-radius: 0px;
+        color: {Theme.CANVAS_HINT};
     }}
     QPushButton {{
-        background: {Theme.SURFACE_2};
+        background: {Theme.SURFACE_3};
         color: {Theme.TEXT};
         border: 1px solid {Theme.BORDER};
-        border-radius: 4px;
+        border-radius: 0px;
         padding: 0 10px;
-        min-height: 28px;
+        min-height: 26px;
     }}
     QPushButton:hover {{
-        background: {Theme.SURFACE_3};
+        background: #E2E2E2;
         border-color: {Theme.BORDER_STRONG};
     }}
     QPushButton:pressed {{
-        background: #1A1E22;
+        background: #D8D8D8;
     }}
     QPushButton:disabled {{
         color: {Theme.TEXT_DIM};
-        background: #1A1E21;
-        border-color: #2B3136;
+        background: #F5F5F5;
+        border-color: #D8D8D8;
     }}
     QPushButton:checked {{
         color: {Theme.TEXT};
@@ -208,14 +223,14 @@ def build_stylesheet() -> str:
         background: {Theme.ACCENT};
         border-color: {Theme.ACCENT};
         font-weight: 600;
-        min-height: 30px;
+        min-height: 28px;
     }}
     QPushButton#PrimaryButton:hover {{
         background: {Theme.ACCENT_HOVER};
         border-color: {Theme.ACCENT_HOVER};
     }}
     QPushButton#SecondaryButton {{
-        background: {Theme.SURFACE_3};
+        background: {Theme.SURFACE_2};
         border-color: {Theme.BORDER_STRONG};
         font-weight: 600;
     }}
@@ -240,54 +255,41 @@ def build_stylesheet() -> str:
         font-weight: 600;
     }}
     QPushButton#DangerButton:hover {{
-        background: #D66A63;
-        border-color: #D66A63;
+        background: #B71C1C;
+        border-color: #B71C1C;
     }}
     QPushButton#ToolButton {{
-        background: transparent;
-        border: 1px solid transparent;
-        border-radius: 4px;
+        background: {Theme.SURFACE_2};
+        border: 1px solid {Theme.BORDER};
+        border-radius: 0px;
         padding: 0;
-        min-width: 32px;
-        min-height: 32px;
-        color: {Theme.TEXT_MUTED};
+        min-width: 30px;
+        max-width: 30px;
+        min-height: 28px;
+        max-height: 28px;
+        color: {Theme.TEXT};
+        font-size: 13px;
     }}
     QPushButton#ToolButton:hover {{
-        background: {Theme.SURFACE_3};
-        border-color: {Theme.BORDER};
+        background: #E2E2E2;
+        border-color: {Theme.BORDER_STRONG};
         color: {Theme.TEXT};
     }}
     QPushButton#ToolButton:checked {{
-        color: {Theme.TEXT};
-        background: {Theme.SELECTION};
-        border-color: #355879;
-    }}
-    QPushButton#NavButton {{
-        background: transparent;
-        border: 1px solid transparent;
-        border-radius: 4px;
-        color: {Theme.TEXT_MUTED};
-    }}
-    QPushButton#NavButton:hover {{
-        background: {Theme.SURFACE_3};
-        border-color: {Theme.BORDER};
-        color: {Theme.TEXT};
-    }}
-    QPushButton#NavButton:checked {{
-        color: {Theme.TEXT};
-        background: {Theme.SELECTION};
-        border: 1px solid #355879;
-        border-left: 2px solid {Theme.ACCENT};
+        color: #FFFFFF;
+        background: {Theme.ACCENT};
+        border-color: {Theme.ACCENT};
+        font-weight: 600;
     }}
     QPushButton#ClassChip {{
-        background: {Theme.SURFACE_3};
+        background: {Theme.SURFACE_2};
         color: {Theme.TEXT};
         border: 1px solid {Theme.BORDER};
-        border-radius: 4px;
+        border-radius: 0px;
         padding: 0 8px;
         font-size: 11px;
-        min-height: 26px;
-        max-height: 26px;
+        min-height: 24px;
+        max-height: 24px;
     }}
     QPushButton#ClassChip:hover {{
         background: {Theme.SURFACE_3};
@@ -301,11 +303,11 @@ def build_stylesheet() -> str:
     }}
     QPushButton#DatasetButton {{
         color: {Theme.TEXT};
-        background: {Theme.SURFACE_3};
+        background: {Theme.SURFACE_2};
         border-color: {Theme.BORDER_STRONG};
         font-weight: 600;
         padding: 0 11px;
-        min-height: 30px;
+        min-height: 28px;
     }}
     QPushButton#DatasetButton:hover {{
         background: {Theme.SELECTION};
@@ -315,22 +317,30 @@ def build_stylesheet() -> str:
         background: {Theme.SURFACE_2};
         color: {Theme.TEXT};
         border: 1px solid {Theme.BORDER};
-        border-radius: 4px;
-        padding: 0 7px;
-        min-height: 28px;
+        border-radius: 0px;
+        padding: 2px 8px;
+        min-height: 26px;
         selection-background-color: {Theme.SELECTION};
     }}
     QComboBox {{
-        padding-right: 22px;
+        padding-right: 24px;
     }}
     QComboBox::drop-down {{
         subcontrol-origin: padding;
         subcontrol-position: top right;
         width: 20px;
         border-left: 1px solid {Theme.BORDER};
-        border-top-right-radius: 4px;
-        border-bottom-right-radius: 4px;
+        border-top-right-radius: 0px;
+        border-bottom-right-radius: 0px;
         background: {Theme.SURFACE_3};
+    }}
+    QComboBox::down-arrow {{
+        width: 0px;
+        height: 0px;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 5px solid {Theme.TEXT_MUTED};
+        margin-right: 4px;
     }}
     QComboBox QAbstractItemView {{
         background: {Theme.SURFACE_2};
@@ -338,15 +348,47 @@ def build_stylesheet() -> str:
         border: 1px solid {Theme.BORDER_STRONG};
         outline: none;
         selection-background-color: {Theme.SELECTION};
-        min-height: 26px;
+        min-height: 24px;
     }}
     QComboBox QAbstractItemView::item {{
-        min-height: 26px;
-        padding: 5px 8px;
+        min-height: 24px;
+        padding: 4px 8px;
     }}
     QComboBox QAbstractItemView::item:selected {{
         background: {Theme.SELECTION};
         color: {Theme.TEXT};
+    }}
+    /* Keep spin arrows in a clean strip so they never paint over the value. */
+    QSpinBox, QDoubleSpinBox {{
+        padding-right: 18px;
+    }}
+    QSpinBox::up-button, QDoubleSpinBox::up-button,
+    QSpinBox::down-button, QDoubleSpinBox::down-button {{
+        subcontrol-origin: border;
+        width: 16px;
+        border-left: 1px solid {Theme.BORDER};
+        background: {Theme.SURFACE_3};
+    }}
+    QSpinBox::up-button, QDoubleSpinBox::up-button {{
+        subcontrol-position: top right;
+        border-bottom: 1px solid {Theme.BORDER};
+    }}
+    QSpinBox::down-button, QDoubleSpinBox::down-button {{
+        subcontrol-position: bottom right;
+    }}
+    QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
+        width: 0px;
+        height: 0px;
+        border-left: 3px solid transparent;
+        border-right: 3px solid transparent;
+        border-bottom: 4px solid {Theme.TEXT_MUTED};
+    }}
+    QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
+        width: 0px;
+        height: 0px;
+        border-left: 3px solid transparent;
+        border-right: 3px solid transparent;
+        border-top: 4px solid {Theme.TEXT_MUTED};
     }}
     QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
         border-color: {Theme.ACCENT};
@@ -355,7 +397,7 @@ def build_stylesheet() -> str:
         background: {Theme.SURFACE_2};
         color: {Theme.TEXT};
         border: 1px solid {Theme.BORDER};
-        border-radius: 4px;
+        border-radius: 0px;
         padding: 6px;
         selection-background-color: {Theme.SELECTION};
         font-family: "Cascadia Mono", "Consolas", "DejaVu Sans Mono", "Noto Sans Mono", monospace;
@@ -364,7 +406,7 @@ def build_stylesheet() -> str:
         background: {Theme.SURFACE_2};
         alternate-background-color: {Theme.SURFACE};
         border: 1px solid {Theme.BORDER};
-        border-radius: 4px;
+        border-radius: 0px;
         color: {Theme.TEXT};
         outline: none;
     }}
@@ -390,8 +432,8 @@ def build_stylesheet() -> str:
     }}
     QListWidget::item, QTreeWidget::item {{
         min-height: 22px;
-        padding: 4px 6px;
-        border-bottom: 1px solid #252B30;
+        padding: 3px 6px;
+        border-bottom: 1px solid #E6E6E6;
     }}
     QListWidget::item:hover, QTreeWidget::item:hover {{
         background: {Theme.SURFACE_3};
@@ -405,7 +447,7 @@ def build_stylesheet() -> str:
         color: {Theme.TEXT_MUTED};
         border: none;
         border-bottom: 1px solid {Theme.BORDER};
-        padding: 6px;
+        padding: 5px;
         font-size: 11px;
         font-weight: 600;
     }}
@@ -419,7 +461,7 @@ def build_stylesheet() -> str:
     QTabBar::tab {{
         background: transparent;
         color: {Theme.TEXT_MUTED};
-        padding: 7px 10px;
+        padding: 6px 10px;
         border: none;
         border-bottom: 2px solid transparent;
     }}
@@ -457,8 +499,8 @@ def build_stylesheet() -> str:
     QGroupBox {{
         background: transparent;
         border: none;
-        margin-top: 16px;
-        padding: 10px 0 0 0;
+        margin-top: 14px;
+        padding: 8px 0 0 0;
         font-weight: 600;
     }}
     QGroupBox::title {{
@@ -479,24 +521,24 @@ def build_stylesheet() -> str:
     }}
     QMenuBar {{
         background: {Theme.SURFACE};
-        color: {Theme.TEXT_MUTED};
+        color: {Theme.TEXT};
     }}
     QMenuBar::item {{
         padding: 5px 9px;
     }}
     QMenuBar::item:selected {{
-        background: {Theme.SURFACE_3};
+        background: {Theme.SELECTION};
         color: {Theme.TEXT};
     }}
     QMenu {{
         background: {Theme.SURFACE_2};
         color: {Theme.TEXT};
         border: 1px solid {Theme.BORDER};
-        padding: 5px;
+        padding: 4px;
     }}
     QMenu::item {{
-        padding: 6px 24px 6px 18px;
-        border-radius: 3px;
+        padding: 5px 22px 5px 16px;
+        border-radius: 0px;
     }}
     QMenu::item:selected {{
         background: {Theme.SELECTION};
@@ -514,6 +556,13 @@ def build_stylesheet() -> str:
     QScrollArea#CanvasScrollArea > QWidget > QWidget {{
         background: {Theme.CANVAS_BG};
     }}
+    QGraphicsView#WorkflowView {{
+        background: {Theme.BG};
+        border: none;
+    }}
+    QWidget#WorkflowCanvasPanel {{
+        background: {Theme.BG};
+    }}
     QScrollArea#InspectorScroll {{
         background: {Theme.SURFACE};
     }}
@@ -521,39 +570,42 @@ def build_stylesheet() -> str:
         background: {Theme.BORDER};
     }}
     QScrollBar:vertical {{
-        background: transparent;
-        width: 8px;
-        margin: 2px;
+        background: {Theme.BG};
+        width: 12px;
+        margin: 0;
     }}
     QScrollBar::handle:vertical {{
-        background: #3C454D;
-        border-radius: 3px;
+        background: #B8B8B8;
+        border-radius: 0px;
         min-height: 28px;
     }}
+    QScrollBar::handle:vertical:hover {{
+        background: #9A9A9A;
+    }}
     QScrollBar:horizontal {{
-        background: transparent;
-        height: 8px;
-        margin: 2px;
+        background: {Theme.BG};
+        height: 12px;
+        margin: 0;
     }}
     QScrollBar::handle:horizontal {{
-        background: #3C454D;
-        border-radius: 3px;
+        background: #B8B8B8;
+        border-radius: 0px;
         min-width: 28px;
     }}
     QProgressBar {{
         background: {Theme.SURFACE_2};
-        color: {Theme.TEXT_MUTED};
+        color: {Theme.TEXT};
         border: 1px solid {Theme.BORDER};
-        border-radius: 4px;
+        border-radius: 0px;
         text-align: center;
-        min-height: 18px;
-        max-height: 22px;
+        min-height: 16px;
+        max-height: 20px;
     }}
     QProgressBar::chunk {{
         background: {Theme.ACCENT};
-        border-radius: 3px;
+        border-radius: 0px;
     }}
     QCheckBox {{
-        spacing: 7px;
+        spacing: 6px;
     }}
     """

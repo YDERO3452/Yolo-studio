@@ -45,6 +45,8 @@ class ExportWorker(QThread):
 class ExportPanel(QWidget):
     """Panel for exporting YOLO models."""
 
+    export_finished = pyqtSignal(dict)
+
     def __init__(self, config_manager=None, parent=None):
         super().__init__(parent)
         self.config = config_manager
@@ -292,21 +294,23 @@ class ExportPanel(QWidget):
         except Exception:
             pass  # harmless: GPU detection failed, leave checkbox as-is
 
-    def export_model(self):
+    def export_model(self, *, workflow_mode: bool = False):
         if not self.exporter:
-            QMessageBox.warning(self, "错误", "请先加载模型")
-            return
+            if not workflow_mode:
+                QMessageBox.warning(self, "错误", "请先加载模型")
+            return False
 
         format_key = self.format_combo.currentData()
 
         # Check format requirements
         reqs = ModelExporter.check_format_requirements(format_key)
         if not reqs["available"]:
-            QMessageBox.warning(
-                self, "缺少依赖",
-                f"导出 {format_key} 需要安装: {', '.join(reqs['missing'])}"
-            )
-            return
+            if not workflow_mode:
+                QMessageBox.warning(
+                    self, "缺少依赖",
+                    f"导出 {format_key} 需要安装: {', '.join(reqs['missing'])}"
+                )
+            return False
 
         kwargs = {
             "imgsz": self.imgsz_spin.value(),
@@ -321,11 +325,13 @@ class ExportPanel(QWidget):
         self.status_text.clear()
         self.status_text.append(f"正在导出为 {format_key} 格式...")
         self.export_btn.setEnabled(False)
+        self._workflow_mode = workflow_mode
 
         self._cleanup_worker()
         self.worker = ExportWorker(self.exporter, format_key, **kwargs)
         self.worker.finished.connect(self.on_export_finished)
         self.worker.start()
+        return True
 
     def _cleanup_worker(self):
         if self.worker is not None:
@@ -340,15 +346,20 @@ class ExportPanel(QWidget):
     def on_export_finished(self, result: dict):
         self.export_btn.setEnabled(True)
         self._cleanup_worker()
+        quiet = getattr(self, "_workflow_mode", False)
+        self._workflow_mode = False
 
         if result.get("success"):
             path = result.get("path", "")
             self.status_text.append(f"\n导出成功!\n保存路径: {path}")
-            QMessageBox.information(self, "导出成功", f"模型已导出到:\n{path}")
+            if not quiet:
+                QMessageBox.information(self, "导出成功", f"模型已导出到:\n{path}")
         else:
             error = result.get("error", "未知错误")
             self.status_text.append(f"\n导出失败: {error}")
-            QMessageBox.critical(self, "导出失败", error)
+            if not quiet:
+                QMessageBox.critical(self, "导出失败", error)
+        self.export_finished.emit(result)
 
     def _get_format_info(self, format_key: str) -> str:
         infos = {

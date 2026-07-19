@@ -33,8 +33,8 @@ class Card(QFrame):
         self.setObjectName("Card")
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(12, 10, 12, 12)
-        self.layout.setSpacing(8)
+        self.layout.setContentsMargins(8, 8, 8, 8)
+        self.layout.setSpacing(6)
         if title:
             self.layout.addWidget(SectionTitle(title))
 

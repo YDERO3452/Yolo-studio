@@ -151,8 +151,8 @@ class ClassListPanel(QWidget):
             self.current_selected_class = name
             self.current_class_label.setStyleSheet(
                 f"color: rgb({r},{g},{b}); font-weight: bold; font-size: 11px; "
-                f"padding: 2px 8px; border: 1px solid {Theme.BORDER}; "
-                f"border-radius: 9px; background: rgba({r},{g},{b},26);"
+                f"padding: 2px 6px; border: 1px solid {Theme.BORDER}; "
+                f"border-radius: 0px; background: rgba({r},{g},{b},26);"
             )
         else:
             self.current_class_label.setText("当前: —")

@@ -58,7 +58,7 @@ if Path("Arial.Unicode.ttf").exists():
 
 _hidden = [
     # Qt 插件
-    "PyQt6.QtSvg",              # main_window._tool_icon() 中延迟导入
+    "PyQt6.QtSvg",              # 资源图标 / 部分面板可能用到
 
     # 动态对话框 (通过菜单触发，非顶层 import)
     "gui.env_check_dialog",     # 环境检测 → "环境" 菜单
