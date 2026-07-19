@@ -466,6 +466,13 @@ class ProjectPanel(QWidget):
         project = self._require_project()
         if not project:
             return
+        host = self.window()
+        if host is not None and getattr(host, "_dirty", False) and getattr(host, "current_image_path", None):
+            if hasattr(host, "_save_annotations"):
+                try:
+                    host._save_annotations()
+                except Exception:
+                    pass
         train_ratio = self.train_ratio_spin.value() / 100
         val_ratio = max(0.0, min(0.45, 1.0 - train_ratio - 0.05))
         try:

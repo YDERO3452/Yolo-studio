@@ -86,15 +86,20 @@ class DataAugmentor:
 
         total_augmented = 0
         for img_file in image_files:
-            label_file = labels_path / (img_file.stem + ".txt")
-
-            # Read image (use imdecode to handle non-ASCII paths)
             try:
-                with open(str(img_file), "rb") as f:
-                    _data = np.frombuffer(f.read(), dtype=np.uint8)
-                image = cv2.imdecode(_data, cv2.IMREAD_COLOR)
-            except Exception:
-                image = cv2.imread(str(img_file))
+                rel = img_file.relative_to(images_path)
+            except ValueError:
+                rel = Path(img_file.name)
+            label_file = labels_path / rel.with_suffix(".txt")
+            if not label_file.is_file():
+                flat = labels_path / (img_file.stem + ".txt")
+                if flat.is_file():
+                    label_file = flat
+
+            # Read image (imdecode handles non-ASCII paths; avoid patched cv2.imread)
+            from core.image_utils import read_image_bgr, write_image
+
+            image = read_image_bgr(img_file)
             if image is None:
                 logger.warning(f"Failed to read image: {img_file}")
                 continue
@@ -103,7 +108,7 @@ class DataAugmentor:
             # Read labels
             bboxes = []
             class_labels = []
-            if label_file.exists():
+            if label_file.is_file():
                 with open(label_file, "r", encoding="utf-8") as f:
                     for line in f:
                         parts = line.strip().split()
@@ -113,22 +118,26 @@ class DataAugmentor:
                             bboxes.append(coords)
                             class_labels.append(class_id)
 
+            # Flatten nested names to avoid train/a.jpg vs val/a.jpg collisions
+            out_stem = "_".join(rel.with_suffix("").parts)
+            out_name = f"{out_stem}{img_file.suffix}"
+
             # Copy original
-            cv2.imwrite(str(out_images / img_file.name), cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
-            if label_file.exists():
+            write_image(out_images / out_name, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+            if label_file.is_file():
                 import shutil
-                shutil.copy2(label_file, out_labels / label_file.name)
+                shutil.copy2(label_file, out_labels / f"{out_stem}.txt")
 
             # Generate augmented versions
             for i in range(augmentations_per_image):
                 try:
                     aug_image, aug_bboxes, aug_labels = self.augment_image(image, bboxes, class_labels)
 
-                    aug_name = f"{img_file.stem}_aug{i}{img_file.suffix}"
-                    cv2.imwrite(str(out_images / aug_name), cv2.cvtColor(aug_image, cv2.COLOR_RGB2BGR))
+                    aug_name = f"{out_stem}_aug{i}{img_file.suffix}"
+                    write_image(out_images / aug_name, cv2.cvtColor(aug_image, cv2.COLOR_RGB2BGR))
 
                     # Write augmented labels
-                    with open(out_labels / f"{img_file.stem}_aug{i}.txt", "w", encoding="utf-8") as f:
+                    with open(out_labels / f"{out_stem}_aug{i}.txt", "w", encoding="utf-8") as f:
                         for bbox, cls in zip(aug_bboxes, aug_labels):
                             f.write(f"{cls} {' '.join(f'{x:.6f}' for x in bbox)}\n")
 
@@ -150,12 +159,9 @@ class DataAugmentor:
         Returns an empty list if the image cannot be read.
         """
         # Use numpy to handle non-ASCII paths (same pattern as canvas.py)
-        try:
-            with open(image_path, "rb") as f:
-                data = np.frombuffer(f.read(), dtype=np.uint8)
-            image = cv2.imdecode(data, cv2.IMREAD_COLOR)
-        except Exception:
-            image = cv2.imread(image_path)
+        from core.image_utils import read_image_bgr
+
+        image = read_image_bgr(image_path)
 
         if image is None:
             logger.warning(f"Failed to read image for preview: {image_path}")

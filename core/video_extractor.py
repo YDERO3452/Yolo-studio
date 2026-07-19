@@ -334,11 +334,10 @@ class VideoFrameExtractor:
         if not ret or frame is None:
             return None
 
-        os.makedirs(output_dir, exist_ok=True)
         return self._save_frame(frame, output_dir, target_idx)
 
     def _save_frame(self, frame: np.ndarray, output_dir: str, frame_idx: int) -> Optional[str]:
-        """Save a frame as a JPEG file."""
+        """Save a frame as a JPEG file (Unicode-safe on Windows)."""
         video_name = Path(self.video_path).stem if self.video_path else "frame"
         # Remove yt-dlp stream suffix like ".f100026" from the video name
         # e.g. "video.f100026" -> "video", "video.f30016.f100026" -> "video"
@@ -347,7 +346,11 @@ class VideoFrameExtractor:
         video_name = re.sub(r'[^\w\-.]', '_', video_name)
         filename = f"{video_name}_frame_{frame_idx:06d}.jpg"
         path = os.path.join(output_dir, filename)
-        cv2.imwrite(path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        from core.image_utils import write_image
+
+        os.makedirs(output_dir, exist_ok=True)
+        if not write_image(path, frame, jpeg_quality=95):
+            return None
         return path
 
     # ------------------------------------------------------------------

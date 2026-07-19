@@ -686,18 +686,51 @@ class AnnotationWorkbenchMixin:
 
     def _prev_image(self) -> None:
         if self.current_image_index > 0:
+            if not self._ensure_saved_before_switch():
+                return
             self.current_image_index -= 1
             self._load_current_image()
 
     def _next_image(self) -> None:
         if self.current_image_index < len(self.image_list) - 1:
+            if not self._ensure_saved_before_switch():
+                return
             self.current_image_index += 1
             self._load_current_image()
 
     def _on_file_list_selected(self, index: int) -> None:
         if 0 <= index < len(self.image_list):
+            if index != self.current_image_index and not self._ensure_saved_before_switch():
+                self.file_list.highlight_current(self.current_image_index)
+                return
             self.current_image_index = index
             self._load_current_image()
+
+    def _ensure_saved_before_switch(self) -> bool:
+        """Persist dirty annotations before changing the current image.
+
+        Returns False if the user cancels navigation.
+        """
+        if not getattr(self, "_dirty", False) or not self.current_image_path:
+            return True
+        if self.config_manager.get("annotation", "auto_save", True):
+            self._autosave_annotations()
+            return not self._dirty
+        reply = QMessageBox.question(
+            self,
+            "未保存标注",
+            "当前图片有未保存标注，是否保存后再切换？",
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+        )
+        if reply == QMessageBox.StandardButton.Cancel:
+            return False
+        if reply == QMessageBox.StandardButton.Save:
+            self._save_annotations()
+            return not self._dirty
+        self._set_dirty(False)
+        return True
 
     def _filter_file_list(self, text: str) -> None:
         needle = text.lower()
@@ -987,6 +1020,9 @@ class AnnotationWorkbenchMixin:
     def _build_training_yaml_for_current_queue(self) -> Optional[str]:
         if not self.image_list:
             return None
+        # Persist current labels before train/val move, otherwise dirty shapes are lost.
+        if getattr(self, "_dirty", False) and self.current_image_path:
+            self._save_annotations()
         images_dir = self.current_image_dir or os.path.dirname(self.image_list[0])
         # Prefer project images/ root so train/val split stays under the project.
         if self.current_project and self.current_project.get("root"):

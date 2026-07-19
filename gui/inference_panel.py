@@ -125,6 +125,7 @@ class InferenceWorker(QThread):
     # ---- Main loop ----
 
     def run(self):
+        cap = None
         try:
             cap = cv2.VideoCapture(self.source)
             if not cap.isOpened():
@@ -208,11 +209,12 @@ class InferenceWorker(QThread):
                     if wait_time > 0:
                         time.sleep(wait_time)
 
-            cap.release()
         except Exception as e:
             from loguru import logger
             logger.error(f"Inference worker error: {e}")
         finally:
+            if cap is not None:
+                cap.release()
             self.finished.emit()
 
     def stop(self):

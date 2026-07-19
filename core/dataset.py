@@ -503,19 +503,45 @@ class DatasetManager:
         train_end = int(total * train_ratio)
         val_end = train_end + int(total * val_ratio)
 
-        if test_ratio > 0:
-            splits = {
-                "train": image_files[:train_end],
-                "val": image_files[train_end:val_end],
-                "test": image_files[val_end:],
-            }
+        # Integer truncation can empty a split (1 image → train_end=0). Keep both
+        # train and val usable whenever the dataset has enough files.
+        if total == 1:
+            train_files = list(image_files)
+            val_files: list[Path] = []
+            test_files: list[Path] = []
+        elif test_ratio > 0 and total >= 3:
+            train_end = max(1, min(train_end, total - 2))
+            val_end = max(train_end + 1, min(val_end, total - 1))
+            train_files = image_files[:train_end]
+            val_files = image_files[train_end:val_end]
+            test_files = image_files[val_end:]
+        elif test_ratio > 0 and total == 2:
+            train_files = image_files[:1]
+            val_files = image_files[1:]
+            test_files = []
         else:
-            # No test split — put all remaining images into val
-            # to avoid losing images due to integer truncation
-            splits = {
-                "train": image_files[:train_end],
-                "val": image_files[train_end:],
-            }
+            # No test (or not enough files for a 3-way split)
+            train_end = max(1, min(train_end, total - 1))
+            train_files = image_files[:train_end]
+            val_files = image_files[train_end:]
+            test_files = []
+
+        splits: dict[str, list[Path]] = {"train": train_files, "val": val_files}
+        if test_files:
+            splits["test"] = test_files
+
+        def _unique_dest(directory: Path, name: str) -> Path:
+            candidate = directory / name
+            if not candidate.exists():
+                return candidate
+            stem = Path(name).stem
+            suffix = Path(name).suffix
+            counter = 1
+            while True:
+                candidate = directory / f"{stem}_{counter:03d}{suffix}"
+                if not candidate.exists():
+                    return candidate
+                counter += 1
 
         for split_name, files in splits.items():
             img_dir = images_path / split_name
@@ -524,15 +550,45 @@ class DatasetManager:
             lbl_dir.mkdir(parents=True, exist_ok=True)
 
             for img_file in files:
-                # Move image
-                dest_img = img_dir / img_file.name
+                dest_img = _unique_dest(img_dir, img_file.name)
                 shutil.move(str(img_file), str(dest_img))
-                # Move label - search recursively in labels_path
-                label_candidates = list(labels_path.rglob(img_file.stem + ".txt"))
-                if label_candidates:
-                    label_file = label_candidates[0]  # Take first match
-                    dest_lbl = lbl_dir / label_file.name
+
+                label_file = None
+                try:
+                    rel = img_file.relative_to(images_path)
+                    preferred = labels_path / rel.with_suffix(".txt")
+                    if preferred.is_file():
+                        label_file = preferred
+                except ValueError:
+                    pass
+                if label_file is None:
+                    excluded = {"train", "val", "test"}
+                    for candidate in labels_path.rglob(img_file.stem + ".txt"):
+                        rel_parts = candidate.relative_to(labels_path).parts[:-1]
+                        if any(part in excluded for part in rel_parts):
+                            continue
+                        label_file = candidate
+                        break
+                if label_file is not None and label_file.is_file():
+                    dest_lbl = lbl_dir / (dest_img.stem + ".txt")
+                    if dest_lbl.exists():
+                        dest_lbl = _unique_dest(lbl_dir, dest_lbl.name)
                     shutil.move(str(label_file), str(dest_lbl))
+
+        # Single-image datasets still need a val folder for Ultralytics mAP.
+        if total == 1 and splits["train"] and not splits["val"]:
+            train_img_dir = images_path / "train"
+            val_img_dir = images_path / "val"
+            train_lbl_dir = labels_path / "train"
+            val_lbl_dir = labels_path / "val"
+            val_img_dir.mkdir(parents=True, exist_ok=True)
+            val_lbl_dir.mkdir(parents=True, exist_ok=True)
+            for src in train_img_dir.iterdir():
+                if src.is_file() and src.suffix.lower() in image_extensions:
+                    shutil.copy2(src, val_img_dir / src.name)
+                    lbl = train_lbl_dir / (src.stem + ".txt")
+                    if lbl.is_file():
+                        shutil.copy2(lbl, val_lbl_dir / lbl.name)
 
         logger.info(f"Split {total} images into train/val/test under {images_path}")
 

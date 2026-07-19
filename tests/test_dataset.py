@@ -96,6 +96,57 @@ class TestBuildDataYaml:
         assert "train" in data
         assert "val" in data
 
+    def test_single_image_keeps_nonempty_train_and_val(self, tmp_path):
+        """One image must not produce an empty train split after truncation."""
+        images_dir = tmp_path / "images"
+        images_dir.mkdir()
+        labels_dir = tmp_path / "labels"
+        labels_dir.mkdir()
+        (images_dir / "only.jpg").write_bytes(b"x")
+        (labels_dir / "only.txt").write_text("0 0.5 0.5 0.2 0.3\n", encoding="utf-8")
+
+        result = DatasetManager.build_data_yaml(
+            images_dir=str(images_dir),
+            labels_dir=str(labels_dir),
+            classes=["obj"],
+            output_yaml=str(tmp_path / "data.yaml"),
+            train_ratio=0.8,
+            val_ratio=0.2,
+            test_ratio=0.0,
+        )
+        assert Path(result).exists()
+        train_imgs = list((images_dir / "train").glob("*"))
+        val_imgs = list((images_dir / "val").glob("*"))
+        assert len(train_imgs) == 1
+        assert len(val_imgs) == 1
+        assert (labels_dir / "train" / "only.txt").exists()
+        assert (labels_dir / "val" / "only.txt").exists()
+
+    def test_nested_video_frames_labels_follow_images(self, tmp_path):
+        """Labels under labels/video_frames/ move with images/video_frames/."""
+        images_dir = tmp_path / "images"
+        frames = images_dir / "video_frames"
+        frames.mkdir(parents=True)
+        labels_dir = tmp_path / "labels" / "video_frames"
+        labels_dir.mkdir(parents=True)
+        (frames / "f0.jpg").write_bytes(b"x")
+        (frames / "f1.jpg").write_bytes(b"x")
+        (labels_dir / "f0.txt").write_text("0 0.5 0.5 0.2 0.3\n", encoding="utf-8")
+        (labels_dir / "f1.txt").write_text("0 0.4 0.4 0.1 0.1\n", encoding="utf-8")
+
+        DatasetManager.build_data_yaml(
+            images_dir=str(images_dir),
+            labels_dir=str(tmp_path / "labels"),
+            classes=["obj"],
+            output_yaml=str(tmp_path / "data.yaml"),
+            train_ratio=0.5,
+            val_ratio=0.5,
+            test_ratio=0.0,
+        )
+        moved_labels = list((tmp_path / "labels").rglob("*.txt"))
+        assert len(moved_labels) == 2
+        assert all(p.parent.name in {"train", "val"} for p in moved_labels)
+
 
 class TestCreateYoloDataset:
     """Tests for create_yolo_dataset instance method."""
