@@ -423,8 +423,29 @@ class ProjectManager:
             val_ratio=val_ratio,
             test_ratio=test_ratio,
         )
+        # Pose needs kpt_shape; prefer auto-detected from labels, else COCO-17 default.
+        if str(project.get("task", "")).lower() == "pose":
+            self._ensure_pose_kpt_shape(yaml_path)
         self.touch_project(project)
         return yaml_path
+
+    @staticmethod
+    def _ensure_pose_kpt_shape(yaml_path: str) -> None:
+        path = Path(yaml_path)
+        if not path.is_file():
+            return
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            return
+        if data.get("kpt_shape"):
+            return
+        data["kpt_shape"] = [17, 3]
+        data["flip_idx"] = list(range(17))
+        path.write_text(
+            yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
 
     # ------------------------------------------------------------------
     # Helpers

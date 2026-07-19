@@ -343,6 +343,24 @@ class ExportPanel(QWidget):
             self.worker.deleteLater()
             self.worker = None
 
+    def stop_export(self) -> None:
+        """Cancel export by stopping the worker thread."""
+        if self.worker is None or not self.worker.isRunning():
+            return
+        try:
+            self.worker.finished.disconnect(self.on_export_finished)
+        except TypeError:
+            pass
+        self._cleanup_worker()
+        self.export_btn.setEnabled(True)
+        quiet = getattr(self, "_workflow_mode", False)
+        self._workflow_mode = False
+        result = {"success": False, "error": "已取消"}
+        self.status_text.append("\n导出已取消")
+        if not quiet:
+            QMessageBox.information(self, "已取消", "导出已取消")
+        self.export_finished.emit(result)
+
     def on_export_finished(self, result: dict):
         self.export_btn.setEnabled(True)
         self._cleanup_worker()

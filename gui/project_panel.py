@@ -465,11 +465,10 @@ class ProjectPanel(QWidget):
         if not self.current_project:
             self.summary_label.setText("先创建或导入项目")
             self.project_info.setPlainText(
-                "流程:\n"
-                "1. 新建空项目，或导入已有 YOLO 数据集。\n"
-                "2. 在项目页导入图片，或打开视频截帧窗口截取帧。\n"
-                "3. 项目里有图片后，左侧标注、训练、推理等菜单才会开放。\n\n"
-                "自动标注、SAM、LLM、格式转换都绑定当前项目，不再允许散文件模式。"
+                "1. 新建或导入项目\n"
+                "2. 导入图片，或用视频抽帧\n"
+                "3. 回画布，双击标注 / 训练 / 推理节点继续\n\n"
+                "自动标注、LLM、格式转换都跟当前项目走。"
             )
             self.project_status.setText("未选择")
             self.project_status.set_variant("")
@@ -478,7 +477,7 @@ class ProjectPanel(QWidget):
         images = self.manager.list_images(self.current_project)
         labels = list((root / "labels").rglob("*.txt")) if (root / "labels").exists() else []
         yaml_path = root / "data.yaml"
-        ready_text = "可进入标注/训练菜单" if images else "请先导入图片或视频截帧"
+        ready_text = "可以去画布继续" if images else "先导入图片或抽帧"
         self.summary_label.setText(self.current_project.get("name", root.name))
         lines = [
             f"根目录: {root}",

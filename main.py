@@ -1,6 +1,7 @@
-"""Yolo Studio - 应用入口.
+"""Yolo Studio entry point.
 
-提供完整的 YOLO 标注工具应用入口。
+Copyright (C) 2024–2026 YDERO3452
+SPDX-License-Identifier: GPL-3.0-only
 """
 
 import faulthandler

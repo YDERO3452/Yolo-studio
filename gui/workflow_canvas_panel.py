@@ -75,7 +75,7 @@ SUB_STAGES: tuple[StageSpec, ...] = (
 )
 
 UTILITY_STAGES: tuple[StageSpec, ...] = (
-    StageSpec("system", "系统", "环境与本机配置", -1, "#666666", "utility", None, None),
+    StageSpec("system", "系统", "环境与本机配置", -1, "#666666", "utility", None, "dialog:env"),
 )
 
 ALL_STAGES: tuple[StageSpec, ...] = MAIN_STAGES + UTILITY_STAGES + SUB_STAGES
@@ -649,7 +649,7 @@ class WorkflowCanvasPanel(QWidget):
 
         self.log_label = QLabel(self)
         self.log_label.setObjectName("MutedText")
-        self.log_label.setText("双击节点打开展开卡 · 运行只走主链路")
+        self.log_label.setText("双击打开模块 · 运行走主链路")
         self.log_label.setStyleSheet(
             f"background: {Theme.SURFACE_2}; border: 1px solid {Theme.BORDER}; padding: 4px 8px;"
         )

@@ -1,4 +1,4 @@
-"""Node-sheet host: expanded workflow-node chrome for open modules."""
+"""Expanded-node chrome that hosts an open module panel."""
 
 from __future__ import annotations
 
@@ -16,10 +16,7 @@ from gui.theme import Theme
 
 
 class NodeSheet(QWidget):
-    """Large card that looks like an expanded workflow node.
-
-    Left accent strip + title/subtitle + close; body hosts any stage panel.
-    """
+    """Title bar + body for a stage opened from the workflow canvas."""
 
     closed = pyqtSignal()
 

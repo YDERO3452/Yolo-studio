@@ -1,27 +1,45 @@
 """Shared detection result parser for Ultralytics YOLO results.
 
 Extracted from ModelManager and YOLOInference to eliminate code duplication.
-Supports all YOLO task types: detect, OBB, pose/keypoint.
+Supports detect, segment (masks→polygon), OBB, and pose.
 """
 
 from core.geometry_utils import obb_xywhr_to_corners
 
 
+def _mask_points(masks, index: int) -> list[tuple[float, float]]:
+  """Extract polygon points from Ultralytics masks.xy for one instance."""
+  xy = getattr(masks, "xy", None)
+  if xy is None:
+    return []
+  try:
+    poly = xy[index]
+  except (IndexError, TypeError, KeyError):
+    return []
+  if poly is None:
+    return []
+  try:
+    arr = poly.cpu().numpy() if hasattr(poly, "cpu") else poly
+  except Exception:
+    arr = poly
+  points: list[tuple[float, float]] = []
+  try:
+    for pt in arr:
+      if len(pt) >= 2:
+        points.append((float(pt[0]), float(pt[1])))
+  except TypeError:
+    return []
+  return points if len(points) >= 3 else []
+
+
 def parse_results(results) -> list[dict]:
   """Extract detection results from Ultralytics YOLO results into a structured format.
 
-  Supports all YOLO task types:
+  Supports:
   - Detect:  result.boxes  → bbox
+  - Segment: result.masks + boxes → polygon
   - OBB:     result.obb   → obb (rotated box with 4 corners)
   - Pose:    result.boxes + result.keypoints → keypoint
-
-  Args:
-      results: Ultralytics YOLO results (list of Result objects).
-
-  Returns:
-      List of detection dicts, each containing:
-      - class_id, class_name, confidence, type
-      - bbox (for detect/keypoint), corners (for obb), keypoints (for pose)
   """
   detections = []
   for result in results:
@@ -85,6 +103,32 @@ def parse_results(results) -> list[dict]:
             det["keypoints"].append((kx, ky, v))
         detections.append(det)
       continue  # Keypoint results are handled
+
+    # --- Segment (masks → polygon) ---
+    masks = getattr(result, "masks", None)
+    if masks is not None and len(masks) > 0 and boxes is not None and len(boxes) > 0:
+      for i in range(len(boxes)):
+        box = boxes[i]
+        cls_id = int(box.cls[0])
+        points = _mask_points(masks, i)
+        det = {
+          "class_id": cls_id,
+          "class_name": names.get(cls_id, str(cls_id)),
+          "confidence": float(box.conf[0]),
+          "bbox": {
+            "x1": float(box.xyxy[0][0]),
+            "y1": float(box.xyxy[0][1]),
+            "x2": float(box.xyxy[0][2]),
+            "y2": float(box.xyxy[0][3]),
+          },
+        }
+        if points:
+          det["type"] = "polygon"
+          det["points"] = points
+        else:
+          det["type"] = "bbox"
+        detections.append(det)
+      continue
 
     # --- Standard Detect (bbox) ---
     if boxes is not None:

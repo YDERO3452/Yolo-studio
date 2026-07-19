@@ -65,6 +65,10 @@ class WorkflowExecutor(QObject):
     def is_running(self) -> bool:
         return self._running
 
+    @property
+    def stop_requested(self) -> bool:
+        return self._stop_requested
+
     def set_handler(self, key: str, handler: NodeHandler) -> None:
         self._handlers[key] = handler
 

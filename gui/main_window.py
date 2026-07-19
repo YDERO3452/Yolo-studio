@@ -351,9 +351,31 @@ class MainWindow(WorkflowOpsMixin, AnnotationWorkbenchMixin, QMainWindow):
 
     def _create_quality_workspace(self) -> QWidget:
         tabs = QTabWidget()
-        tabs.addTab(AdvancedFeaturesPanel(self.class_manager, parent=self), "统计")
+        stats_panel = AdvancedFeaturesPanel(self.class_manager, parent=self)
+        stats_panel.apply_training_config.connect(self._apply_suggested_training_config)
+        tabs.addTab(stats_panel, "统计")
         tabs.addTab(WorkflowOptimizationPanel(self.class_manager, parent=self), "流程")
+        self._quality_stats_panel = stats_panel
         return tabs
+
+    def _apply_suggested_training_config(self, config: dict) -> None:
+        panel = self.training_panel
+        if "epochs" in config:
+            panel.epochs_spin.setValue(int(config["epochs"]))
+        if "batch" in config:
+            panel.batch_spin.setValue(int(config["batch"]))
+        if "lr0" in config and hasattr(panel, "lr0_spin"):
+            panel.lr0_spin.setValue(float(config["lr0"]))
+        if "optimizer" in config and hasattr(panel, "optimizer_combo"):
+            opt = str(config["optimizer"])
+            idx = panel.optimizer_combo.findText(opt)
+            if idx >= 0:
+                panel.optimizer_combo.setCurrentIndex(idx)
+            else:
+                panel.optimizer_combo.setCurrentText(opt)
+        if "imgsz" in config and hasattr(panel, "imgsz_spin"):
+            panel.imgsz_spin.setValue(int(config["imgsz"]))
+        self.statusBar().showMessage("已应用推荐训练参数", 3000)
 
     def _init_menus(self) -> None:
         """Build actions into a HUD menu; native MenuBar stays hidden."""
@@ -600,6 +622,7 @@ class MainWindow(WorkflowOpsMixin, AnnotationWorkbenchMixin, QMainWindow):
         if not self.training_panel.name_edit.text().strip():
             self.training_panel.name_edit.setText("exp")
         self.results_panel.set_project(project)
+        self._apply_project_task(project.get("task", "detect"))
 
         if images:
             self._switch_workspace(0)
@@ -691,10 +714,9 @@ class MainWindow(WorkflowOpsMixin, AnnotationWorkbenchMixin, QMainWindow):
             self,
             "关于 YOLO Studio",
             "YOLO Studio v1.0.0\n\n"
-            "用于数据集标注、模型训练、推理和导出的桌面工作台。\n\n"
-            "核心能力:\n"
-            "- YOLO 数据集标注\n"
-            "- 训练、验证、推理与模型导出\n",
+            "YOLO 标注、训练、推理工具。\n"
+            "首页是节点画布，双击进模块；⋯ 菜单里有环境检测等。\n\n"
+            "GPL-3.0 · YDERO3452",
         )
 
     def _on_trained_model_ready(self, best_pt: str, action: str) -> None:
@@ -727,6 +749,9 @@ class MainWindow(WorkflowOpsMixin, AnnotationWorkbenchMixin, QMainWindow):
                 self._llm_worker.terminate()
                 self._llm_worker.wait(1000)
         if self._yolo_label_thread and self._yolo_label_thread.isRunning():
+            worker = getattr(self, "_yolo_label_worker", None)
+            if worker is not None and hasattr(worker, "stop"):
+                worker.stop()
             self._yolo_label_thread.quit()
             if not self._yolo_label_thread.wait(3000):
                 self._yolo_label_thread.terminate()

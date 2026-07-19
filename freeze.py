@@ -1,13 +1,7 @@
-"""Path utilities for frozen (PyInstaller) and development environments.
+"""Paths for PyInstaller builds and normal `python main.py` runs.
 
-PyInstaller unpacks bundled files into a temporary directory (sys._MEIPASS).
-This module provides helpers to locate resources whether the app is running
-from source or from a bundled executable.
-
-Functions:
-  get_resource_path(relative_path) -> Path  — locate a bundled resource
-  get_app_root() -> Path                     — application root directory
-  get_writable_dir() -> Path                 — user-writable data directory
+Copyright (C) 2024–2026 YDERO3452
+SPDX-License-Identifier: GPL-3.0-only
 """
 
 import sys

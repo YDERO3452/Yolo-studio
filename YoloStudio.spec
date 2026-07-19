@@ -60,10 +60,10 @@ _hidden = [
     # Qt 插件
     "PyQt6.QtSvg",              # 资源图标 / 部分面板可能用到
 
-    # 动态对话框 (通过菜单触发，非顶层 import)
-    "gui.env_check_dialog",     # 环境检测 → "环境" 菜单
-    "gui.video_capture_dialog", # 视频截帧 → "视频截帧" 菜单
-    "gui.format_conversion_dialog",  # 格式转换 → "格式转换" 菜单
+    # 动态对话框 (通过 HUD ⋯ 菜单 / 工作流子节点打开，非顶层 import)
+    "gui.env_check_dialog",     # 环境检测 → ⋯/工具/环境 或 系统节点
+    "gui.video_capture_dialog", # 视频截帧 → 视频子节点
+    "gui.format_conversion_dialog",  # 格式转换 → 格式子节点
 
     # 工作流优化面板中动态导入的 core 模块
     "core.batch_processor",

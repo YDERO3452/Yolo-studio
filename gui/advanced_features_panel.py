@@ -50,11 +50,42 @@ class _StatsCollectWorker(QThread):
             self.finished.emit(None)
 
 
+class _AugmentWorker(QThread):
+    """Background thread for dataset augmentation."""
+
+    finished = pyqtSignal(int, str)  # count, error
+
+    def __init__(self, images_dir, labels_dir, out_images, out_labels, augmentations_per_image=2):
+        super().__init__()
+        self.images_dir = images_dir
+        self.labels_dir = labels_dir
+        self.out_images = out_images
+        self.out_labels = out_labels
+        self.augmentations_per_image = augmentations_per_image
+
+    def run(self):
+        try:
+            from core.augmentor import DataAugmentor
+
+            count = DataAugmentor().augment_dataset(
+                self.images_dir,
+                self.labels_dir,
+                self.out_images,
+                self.out_labels,
+                augmentations_per_image=self.augmentations_per_image,
+            )
+            self.finished.emit(int(count or 0), "")
+        except Exception as exc:
+            logger.error(f"Augmentation error: {exc}")
+            self.finished.emit(0, str(exc))
+
+
 class AdvancedFeaturesPanel(QWidget):
     """Panel for advanced features."""
 
     statistics_collected = pyqtSignal(dict)
     report_generated = pyqtSignal(str)
+    apply_training_config = pyqtSignal(dict)  # epochs/batch/lr0/optimizer → TrainingPanel
 
     def __init__(self, class_manager: ClassManager, parent=None):
         super().__init__(parent)
@@ -64,6 +95,8 @@ class AdvancedFeaturesPanel(QWidget):
         self.augmentation_helper = DataAugmentationHelper()
         self.finetuning_helper = ModelFineTuningHelper()
         self.current_statistics = None
+        self._last_training_config: dict | None = None
+        self._augment_worker = None
 
         self.init_ui()
 
@@ -203,8 +236,8 @@ class AdvancedFeaturesPanel(QWidget):
 
         self._add_section_header(
             layout,
-            "增强建议",
-            "根据已收集的数据分布给出增强策略和推荐配置。",
+            "数据增强",
+            "先看建议，也可以直接对统计目录跑增强。",
         )
 
         action_layout = QHBoxLayout()
@@ -213,12 +246,15 @@ class AdvancedFeaturesPanel(QWidget):
         self.show_config_btn.setObjectName("PrimaryButton")
         self.show_config_btn.clicked.connect(self.show_augmentation_config)
         action_layout.addWidget(self.show_config_btn)
+        self.run_augment_btn = QPushButton("执行增强")
+        self.run_augment_btn.clicked.connect(self.run_dataset_augmentation)
+        action_layout.addWidget(self.run_augment_btn)
         layout.addLayout(action_layout)
 
         self.augmentation_suggestions = QTextEdit()
         self.augmentation_suggestions.setReadOnly(True)
         self.augmentation_suggestions.setPlaceholderText(
-            "请先在“统计分析”中收集数据，再查看增强建议"
+            "请先在“统计分析”中收集数据，再查看增强建议或执行增强"
         )
         layout.addWidget(self.augmentation_suggestions, 1)
 
@@ -231,8 +267,8 @@ class AdvancedFeaturesPanel(QWidget):
 
         self._add_section_header(
             layout,
-            "训练配置",
-            "根据数据规模和类别分布生成训练参数与实践建议。",
+            "训练参数",
+            "按数据量估一下 epochs / batch 等，可写回训练页。",
         )
 
         action_layout = QHBoxLayout()
@@ -241,6 +277,9 @@ class AdvancedFeaturesPanel(QWidget):
         self.show_training_config_btn.setObjectName("PrimaryButton")
         self.show_training_config_btn.clicked.connect(self.show_training_config)
         action_layout.addWidget(self.show_training_config_btn)
+        self.apply_training_btn = QPushButton("应用到训练页")
+        self.apply_training_btn.clicked.connect(self.apply_training_config_to_panel)
+        action_layout.addWidget(self.apply_training_btn)
         layout.addLayout(action_layout)
 
         self.training_tips = QTextEdit()
@@ -390,6 +429,46 @@ class AdvancedFeaturesPanel(QWidget):
 
         self.augmentation_suggestions.setText(suggestions_text)
 
+    def run_dataset_augmentation(self):
+        """Run DataAugmentor on the statistics directory."""
+        image_dir = getattr(self, "stats_dir", None)
+        if not image_dir:
+            QMessageBox.warning(self, "错误", "请先在统计分析中选择数据目录")
+            return
+        if self._augment_worker and self._augment_worker.isRunning():
+            QMessageBox.warning(self, "提示", "增强任务正在进行")
+            return
+
+        from gui.annotation_io import labels_dir_for_image_dir
+
+        labels_dir = labels_dir_for_image_dir(image_dir)
+        out_root = QFileDialog.getExistingDirectory(
+            self, "选择增强输出目录（将创建 images/ 与 labels/）",
+            str(Path(image_dir).parent),
+        )
+        if not out_root:
+            return
+        out_images = str(Path(out_root) / "images")
+        out_labels = str(Path(out_root) / "labels")
+
+        self.run_augment_btn.setEnabled(False)
+        self.augmentation_suggestions.append("\n正在执行数据增强…")
+
+        self._augment_worker = _AugmentWorker(
+            image_dir, labels_dir, out_images, out_labels, augmentations_per_image=2,
+        )
+        self._augment_worker.finished.connect(self._on_augment_finished)
+        self._augment_worker.start()
+
+    def _on_augment_finished(self, count: int, error: str) -> None:
+        self.run_augment_btn.setEnabled(True)
+        if error:
+            self.augmentation_suggestions.append(f"\n增强失败: {error}")
+            QMessageBox.critical(self, "增强失败", error)
+            return
+        self.augmentation_suggestions.append(f"\n增强完成: 新生成 {count} 张图片")
+        QMessageBox.information(self, "完成", f"已生成 {count} 张增强图片")
+
     def show_training_config(self):
         """Show training configuration."""
         if not self.current_statistics:
@@ -400,6 +479,7 @@ class AdvancedFeaturesPanel(QWidget):
             self.current_statistics
         )
         tips = self.finetuning_helper.get_training_tips()
+        self._last_training_config = dict(config)
 
         config_text = "推荐训练配置:\n"
         config_text += "="*50 + "\n"
@@ -412,3 +492,15 @@ class AdvancedFeaturesPanel(QWidget):
             config_text += f"{i}. {tip}\n"
 
         self.training_tips.setText(config_text)
+
+    def apply_training_config_to_panel(self):
+        """Push the last suggested training config into TrainingPanel."""
+        if not self._last_training_config:
+            if not self.current_statistics:
+                QMessageBox.warning(self, "错误", "请先收集统计数据并显示推荐配置")
+                return
+            self.show_training_config()
+        if not self._last_training_config:
+            return
+        self.apply_training_config.emit(dict(self._last_training_config))
+        QMessageBox.information(self, "好了", "参数已写到训练页")

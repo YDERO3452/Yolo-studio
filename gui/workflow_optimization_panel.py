@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 
 from core.class_manager import ClassManager
 from core.model_manager import ModelManager
-from core.workflow_optimizer import AnnotationValidator, DataQualityChecker, PresetManager, WorkflowBatchProcessor
+from core.workflow_optimizer import AnnotationValidator, DataQualityChecker, PresetManager
 
 
 class _BatchLabelWorker(QThread):
@@ -80,7 +80,6 @@ class WorkflowOptimizationPanel(QWidget):
     def __init__(self, class_manager: ClassManager, parent=None):
         super().__init__(parent)
         self.class_manager = class_manager
-        self.batch_processor = WorkflowBatchProcessor()
         self.validator = AnnotationValidator()
         self.quality_checker = DataQualityChecker()
         self.preset_manager = PresetManager()

@@ -85,7 +85,10 @@ class AnnotationCanvas(QWidget):
         self.obb_end = QPoint()
         self.obb_angle = 0.0  # degrees
 
-        # KEYPOINT drawing — no intermediate state, single click
+        # KEYPOINT drawing — multi-click session (finish with Enter / right-click)
+        self.drawing_keypoints = False
+        self.keypoint_points: list[tuple[float, float, int]] = []
+        self.num_keypoints = 17  # COCO default; finish early via Enter/right-click
 
         # Move / resize state
         self.moving = False
@@ -216,7 +219,9 @@ class AnnotationCanvas(QWidget):
         self.drawing_bbox = False
         self.drawing_polygon = False
         self.drawing_obb = False
+        self.drawing_keypoints = False
         self.polygon_points.clear()
+        self.keypoint_points.clear()
         self.update()
 
     # Undo / redo
@@ -496,6 +501,28 @@ class AnnotationCanvas(QWidget):
                 painter.drawEllipse(pt, 4, 4)
             painter.setBrush(Qt.BrushStyle.NoBrush)
 
+        elif self.drawing_keypoints and self.keypoint_points:
+            pen = QPen(QColor(255, 255, 0), 2)
+            painter.setPen(pen)
+            pts = []
+            for kx, ky, _v in self.keypoint_points:
+                wx = int(kx * scale) + ox
+                wy = int(ky * scale) + oy
+                pts.append(QPoint(wx, wy))
+            for i in range(len(pts) - 1):
+                painter.drawLine(pts[i], pts[i + 1])
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(255, 255, 0))
+            for pt in pts:
+                painter.drawEllipse(pt, 4, 4)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            # Progress label
+            painter.setPen(QPen(QColor(255, 255, 0)))
+            painter.setFont(QFont("Microsoft YaHei UI", 9))
+            label = f"{len(self.keypoint_points)}/{self.num_keypoints or '…'}"
+            if pts:
+                painter.drawText(pts[-1] + QPoint(8, -8), label)
+
         elif self.drawing_obb:
             pen = QPen(QColor(255, 255, 0), 2, Qt.PenStyle.DashLine)
             painter.setPen(pen)
@@ -597,25 +624,15 @@ class AnnotationCanvas(QWidget):
 
             elif mode == CanvasMode.CREATE_KEYPOINT:
                 img_x, img_y = self._widget_to_image(pos)
-                self.push_undo()
-                # Use a reasonable default bbox size (50px) around the click point
-                half = 25
-                x1 = max(0, img_x - half)
-                y1 = max(0, img_y - half)
-                x2 = min(self.image_width, img_x + half)
-                y2 = min(self.image_height, img_y + half)
-                shape = {
-                    "type": ShapeType.KEYPOINT,
-                    "class_id": self.current_class_id,
-                    "data": {
-                        "x1": x1, "y1": y1,
-                        "x2": x2, "y2": y2,
-                        "keypoints": [(img_x, img_y, 2)],
-                    },
-                }
-                self.shapes.append(shape)
-                self.shape_created.emit(shape)
+                if not self.drawing_keypoints:
+                    self.drawing_keypoints = True
+                    self.keypoint_points = [(img_x, img_y, 2)]
+                else:
+                    self.keypoint_points.append((img_x, img_y, 2))
                 self.update()
+                # Auto-finish when the expected skeleton length is reached
+                if self.num_keypoints > 0 and len(self.keypoint_points) >= self.num_keypoints:
+                    self._finish_keypoints()
 
         elif event.button() == Qt.MouseButton.RightButton:
             if self.drawing_polygon:
@@ -624,6 +641,13 @@ class AnnotationCanvas(QWidget):
                 else:
                     self.drawing_polygon = False
                     self.polygon_points.clear()
+                    self.update()
+                return
+            if self.drawing_keypoints:
+                if self.keypoint_points:
+                    self._finish_keypoints()
+                else:
+                    self.drawing_keypoints = False
                     self.update()
                 return
             # Delete shape on right click in edit mode
@@ -817,6 +841,8 @@ class AnnotationCanvas(QWidget):
         if key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
             if self.drawing_polygon and len(self.polygon_points) >= 4:
                 self._finish_polygon()
+            elif self.drawing_keypoints and self.keypoint_points:
+                self._finish_keypoints()
             return
 
         if key == Qt.Key.Key_F:
@@ -876,6 +902,38 @@ class AnnotationCanvas(QWidget):
                 self.shape_created.emit(shape)
                 self.update()
         self.polygon_points.clear()
+        self.update()
+
+    def _finish_keypoints(self):
+        points = list(self.keypoint_points)
+        self.drawing_keypoints = False
+        self.keypoint_points.clear()
+        if not points:
+            self.update()
+            return
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        pad = 8
+        x1 = max(0, min(xs) - pad)
+        y1 = max(0, min(ys) - pad)
+        x2 = min(self.image_width, max(xs) + pad)
+        y2 = min(self.image_height, max(ys) + pad)
+        if x2 - x1 < 2:
+            x2 = min(self.image_width, x1 + 2)
+        if y2 - y1 < 2:
+            y2 = min(self.image_height, y1 + 2)
+        self.push_undo()
+        shape = {
+            "type": ShapeType.KEYPOINT,
+            "class_id": self.current_class_id,
+            "data": {
+                "x1": float(x1), "y1": float(y1),
+                "x2": float(x2), "y2": float(y2),
+                "keypoints": [(float(x), float(y), int(v)) for x, y, v in points],
+            },
+        }
+        self.shapes.append(shape)
+        self.shape_created.emit(shape)
         self.update()
 
     # ------------------------------------------------------------------

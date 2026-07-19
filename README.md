@@ -1,281 +1,147 @@
 # YOLO Studio
 
-<div align="center">
-
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
 [![PyQt6](https://img.shields.io/badge/GUI-PyQt6-orange.svg)](https://www.riverbankcomputing.com/static/Docs/PyQt6/)
 [![Platform](https://img.shields.io/badge/Platform-Windows_|_Linux-lightgrey.svg)](https://github.com)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.2+-red.svg)](https://pytorch.org/)
-[![OpenCV](https://img.shields.io/badge/OpenCV-4.8+-purple.svg)](https://opencv.org/)
-[![Ultralytics](https://img.shields.io/badge/Ultralytics-8.3+-yellow.svg)](https://ultralytics.com/)
 
-**专业的 YOLO 系列模型标注与训练桌面工作台**
+YOLO 标注 / 训练 / 推理桌面工具。首页是节点画布：双击进模块，HUD 里可以整条链路跑起来。
 
-[![Release](https://img.shields.io/github/v/release/YDERO3452/Yolo-studio?label=Latest)](https://github.com/YDERO3452/Yolo-studio/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/YDERO3452/Yolo-studio/total)](https://github.com/YDERO3452/Yolo-studio/releases/latest)
-
-</div>
+[Releases](https://github.com/YDERO3452/Yolo-studio/releases/latest) · [Issues](https://github.com/YDERO3452/Yolo-studio/issues)
 
 ---
 
-## 下载安装
+## 下载
 
-前往 [Releases](https://github.com/YDERO3452/Yolo-studio/releases/latest) 下载最新版本：
+| 平台 | 文件 |
+|------|------|
+| Windows | `YoloStudio.exe`（免安装） |
+| Linux | `YoloStudio` → `chmod +x` 后运行 |
 
-| 平台 | 文件 | 说明 |
-|------|------|------|
-| Windows | `YoloStudio.exe` | 双击运行，无需安装 |
-| Linux | `YoloStudio` | `chmod +x YoloStudio && ./YoloStudio` |
-
-> 首次运行会自动下载 YOLO 模型，如需 GPU 加速请安装 [CUDA + PyTorch](https://pytorch.org/get-started/locally/)
+第一次跑会拉 YOLO 权重。要用 GPU，装好对应的 [CUDA 版 PyTorch](https://pytorch.org/get-started/locally/) 即可。
 
 ---
 
-## 项目简介
+## 能干什么
 
-YOLO Studio 是一个基于 PyQt6 和 Ultralytics YOLO 框架开发的桌面端应用程序，提供完整的目标检测工作流支持，包括数据标注、数据集管理、模型训练、推理测试和格式转换等功能。
+- **画布工作流**：数据 → 标注 → 训练 → 结果 → 推理 → 导出；旁边有质检。子节点挂项目、抽帧、环境、格式转换等。
+- **多任务**：detect / segment / pose / obb / classify（打开项目会跟着切标注模式和默认权重）。
+- **标注**：框、多边形、旋转框、多点关键点；YOLO / LLM 自动标；`-seg` 能把 mask 落成多边形。
+- **训练 / 推理 / 导出**：Ultralytics 训练与监控；单图、批量、视频、摄像头；导出 ONNX 等。
+- **质检**：统计、质量检查；可跑数据增强，也可把推荐训练参数写回训练页。
+- **格式**：YOLO ↔ VOC / COCO / DOTA。
 
-### 核心特性
-
-- **本地化部署**：完全离线可用，数据隐私安全
-- **模块化架构**：清晰的代码结构，易于扩展和维护
-- **高效工作流**：针对 YOLO 任务优化的操作流程
-- **多格式支持**：支持 YOLO、VOC、COCO、DOTA 等主流格式
-
----
-
-## 功能模块
-
-### 1. 标注工作台
-
-- 支持多种标注类型：矩形框、多边形、旋转框、关键点
-- 智能类别管理与颜色配置
-- 文件队列导航与快速切换
-- 自动保存与批量自动标注功能
-
-### 2. 数据集管理
-
-- YOLO 标准目录结构自动生成
-- data.yaml 配置文件构建
-- 训练集/验证集/测试集自动划分
-- 数据集完整性检查
-
-### 3. 训练面板
-
-- 基于 Ultralytics 训练引擎
-- 可视化参数配置界面
-- 实时训练日志与指标监控
-- 训练状态实时反馈
-
-### 4. 推理面板
-
-- 支持单张图片、目录批量、视频文件和摄像头实时推理
-- 多种 YOLO 模型版本支持（YOLOv8、YOLO26）
-- 检测结果可视化与导出
-
-### 5. 智能标注 (LLM)
-
-- 集成 Qwen-VL 视觉语言模型
-- 基于自然语言提示的自动目标检测
-- 辅助人工标注，提升效率
-
-### 6. 导出与格式转换
-
-- 支持 YOLO、Pascal VOC、COCO、DOTA 格式互转
-- 灵活的导出路径配置
-- 批量转换处理
+本地跑，数据不用上传。
 
 ---
 
-## 环境要求
+## 要求
 
-- **操作系统**：Windows 10/11、Linux (Ubuntu 20.04+)
-- **Python 版本**：3.10 或更高版本
-- **GPU 支持**：NVIDIA GPU + CUDA 12.1（可选，CPU 模式也可运行）
-- **内存建议**：8GB RAM 以上
+- Windows 10/11 或 Linux（Ubuntu 20.04+）
+- Python 3.10+
+- 可选：NVIDIA + CUDA（没有也能 CPU 跑）
+- 建议 8GB+ 内存
 
 ---
 
-## 快速开始
+## 安装
 
-### 方式一：一键安装脚本（推荐）
+**脚本（推荐）**
 
-**Windows:**
 ```bat
 scripts\install.bat
 ```
 
-**Linux / macOS:**
 ```bash
 bash scripts/install.sh
 ```
 
-脚本会自动检测 NVIDIA GPU 并选择安装 CPU 或 CUDA 版 PyTorch。
+**手动**
 
-### 方式二：手动安装
+国内镜像（可选）：
 
-> **国内加速**：先配置镜像源再安装
-> ```bash
-> pip config set global.index-url https://mirrors.aliyun.com/pypi/simple
-> pip config set global.trusted-host mirrors.aliyun.com
-> ```
+```bash
+pip config set global.index-url https://mirrors.aliyun.com/pypi/simple
+pip config set global.trusted-host mirrors.aliyun.com
+```
 
-**CPU 模式**（无 NVIDIA 显卡）：
+CPU：
+
 ```bash
 pip install -r requirements.txt
 ```
 
-**NVIDIA GPU 模式**：先查看你的驱动支持的 CUDA 版本，再选择对应的 wheel：
+GPU：先看 `nvidia-smi` 的 CUDA 版本，再装对应 wheel，例如：
+
 ```bash
-# 1. 查看驱动支持的 CUDA 版本
-nvidia-smi
-#    输出示例: "CUDA Version: 12.4" → 选 cu124
-
-# 2. 根据版本选择（PyTorch 官方源，国内镜像无 CUDA wheel）
-#    CUDA 12.4+:  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
-#    CUDA 12.1+:  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-#    CUDA 11.8+:  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-
-# 3. 再装其余依赖（走国内镜像）
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 pip install -r requirements.txt
 ```
 
-| PyTorch wheel | 需要驱动 >= | 对应 CUDA |
-|---------------|------------|----------|
-| cu118         | 450.36     | 11.8     |
-| cu121         | 525.60     | 12.1     |
-| cu124         | 545.84     | 12.4     |
+| wheel | 驱动大致要求 | CUDA |
+|-------|-------------|------|
+| cu118 | ≥ 450.36 | 11.8 |
+| cu121 | ≥ 525.60 | 12.1 |
+| cu124 | ≥ 545.84 | 12.4 |
 
-### 启动应用
+启动：
 
 ```bash
 python main.py
 ```
 
+上手：建项目 → 导入图片 → 画布上双击节点。菜单在左上角 **⋯**。要串跑点 **运行**，中途可 **停止**。
+
 ---
 
-## 项目结构
+## 目录
 
 ```text
-Yolo Studio/
-├─ core/          # 训练、推理、数据集、格式转换、配置等核心逻辑
-├─ gui/           # 主窗口、画布、面板、对话框、主题
-├─ tests/         # pytest 测试
-├─ configs/       # 配置文件
-├─ scripts/       # 工具脚本
-└─ main.py        # 应用入口
+Yolo-studio/
+├─ core/       # 训练、推理、数据集、格式转换
+├─ gui/        # 窗口、画布、节点、各面板
+├─ tests/
+├─ configs/
+├─ scripts/
+├─ freeze.py
+└─ main.py
 ```
 
 ---
 
-## 技术参考
+## 参考过
 
-本项目在开发过程中参考了以下优秀开源项目和技术文档：
+- [X-AnyLabeling](https://github.com/CVHub520/X-AnyLabeling) — 标注交互、自动标注、格式转换
+- [Ultralytics](https://docs.ultralytics.com/) — 训练 / 推理 / 数据集约定
+- Qwen-VL 一类视觉模型 — LLM 辅助标注
+- [PyQt6](https://www.riverbankcomputing.com/static/Docs/PyQt6/) / [OpenCV](https://docs.opencv.org/)
+- 数据格式：[COCO](https://cocodataset.org/) · [VOC](http://host.robots.ox.ac.uk/pascal/VOC/) · [DOTA](https://captain-whu.github.io/DOTA/)
 
-### X-AnyLabeling
+---
 
-- **项目地址**：https://github.com/CVHub520/X-AnyLabeling
-- **参考内容**：标注交互设计、自动标注流程、格式转换架构
+## 模型
 
-### Ultralytics YOLO
+仓库不含 `.pt`。首次用时 Ultralytics 会下；也可自己去[模型页](https://docs.ultralytics.com/models/)拿。常用名：`yolo11n.pt`、`-seg` / `-pose` / `-obb` / `-cls`，以及 YOLOv8、YOLO26、RT-DETR 等。
 
-- **官方文档**：https://docs.ultralytics.com/
-- **参考内容**：训练/推理接口、数据集规范、模型导出
+---
 
-### Large Language Models (LLM)
+## GPU（打包版）
 
-- **参考实现**：OpenAI API / 阿里云通义千问
-- **参考内容**：视觉语言模型目标检测、智能标注生成
-- **已集成**：基于 Qwen-VL 的 LLM 自动标注功能，支持通过文本提示快速生成标注框。
+默认 CPU。要加速：
 
-### PyQt6
+1. **⋯ → 工具 → 环境**（或双击「系统 / 环境」节点）看检测结果  
+2. 点安装 CUDA 版 PyTorch，或自己执行：
 
-- **官方文档**：https://www.riverbankcomputing.com/static/Docs/PyQt6/
-- **参考内容**：GUI 框架、信号槽机制、自定义控件
+```bash
+pip install torch torchvision --force-reinstall --index-url https://download.pytorch.org/whl/cu121
+```
 
-### OpenCV
-
-- **官方文档**：https://docs.opencv.org/
-- **参考内容**：图像处理、绘制函数、格式转换
-
-### 数据格式标准
-
-- **COCO**：https://cocodataset.org/
-- **Pascal VOC**：http://host.robots.ox.ac.uk/pascal/VOC/
-- **DOTA**：https://captain-whu.github.io/DOTA/
+驱动一般要 ≥ 525.60（CUDA 12.x）。`nvidia-smi` 能看到驱动支持的 CUDA 版本。pip 的 torch wheel 自带 CUDA 运行时，不必再装 Toolkit。
 
 ---
 
 ## 许可证
 
-本项目采用 GNU General Public License v3.0 开源许可证。
+Copyright (C) 2024–2026 YDERO3452
 
-详细信息请参阅 [LICENSE](LICENSE) 文件。
-
----
-
-<div align="center">
-
-**如有问题或建议，欢迎提交 Issue 或 Pull Request**
-
-</div>
-
----
-
-## 模型下载
-
-模型文件（`.pt`）不包含在代码仓库中。首次运行时，Ultralytics 会自动下载所需模型。如需手动下载，可访问 [Ultralytics Models](https://docs.ultralytics.com/models/) 获取预训练权重。
-
-### 支持的模型
-
-| 系列 | 模型 | 用途 |
-|------|------|------|
-| YOLO26 | yolo26n/s/m/l/x.pt | 目标检测 |
-| YOLO26 | yolo26n/s-seg.pt | 实例分割 |
-| YOLO26 | yolo26n/s-pose.pt | 姿态估计 |
-| YOLO26 | yolo26n/s-obb.pt | 旋转框检测 |
-| YOLO11 | yolo11n/s/m/l/x.pt | 目标检测 |
-| YOLOv8 | yolov8n/s/m/l/x.pt | 目标检测 |
-| RT-DETR | rtdetr-l/x.pt | 实时检测 |
-
----
-
-## CUDA 安装指南
-
-### 打包版本（exe）用户
-
-打包版本默认使用 CPU 模式。如需 GPU 加速：
-
-1. 打开应用 → 菜单 → **环境** → 自动检测 GPU 和驱动
-2. 点击 **安装 PyTorch (cu121)** 按钮一键安装 CUDA 版 PyTorch
-3. 或手动执行：
-   ```bash
-   pip install torch torchvision --force-reinstall --index-url https://download.pytorch.org/whl/cu121
-   ```
-
-**驱动要求：** NVIDIA 驱动 >= 525.60（CUDA 12.0+）。查看驱动支持的 CUDA 版本：
-```bash
-nvidia-smi
-```
-
-### 从源码运行用户
-
-先安装 CUDA 版 PyTorch，再安装项目依赖：
-```bash
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-pip install -r requirements.txt
-```
-PyTorch pip wheel 自带 CUDA 运行时，无需单独安装 CUDA Toolkit。
-
-### 版本兼容性
-
-| PyTorch wheel | 需要驱动 >= | 对应 CUDA |
-|---------------|------------|----------|
-| cu118         | 450.36     | 11.8     |
-| cu121         | 525.60     | 12.1     |
-| cu124         | 545.84     | 12.4     |
-
-PyTorch pip wheel 自带 CUDA 运行时，**无需单独安装 CUDA Toolkit**。
-
-应用内置了环境检测功能（菜单 → **环境**），可自动诊断 GPU/CUDA/PyTorch 兼容性并给出安装建议。
+GNU GPL v3.0，见 [LICENSE](LICENSE)。

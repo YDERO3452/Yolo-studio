@@ -170,6 +170,50 @@ class TestParseResultsKeypoint:
         assert detections[0]["keypoints"][0] == (50.0, 50.0, 2)
 
 
+class TestParseResultsSegment:
+    """Tests for segmentation mask → polygon parsing."""
+
+    def test_polygon_from_masks(self):
+        box = _make_mock_box(0, 0.91, 10, 20, 110, 120)
+        poly = np.array([[10.0, 20.0], [110.0, 20.0], [110.0, 120.0], [10.0, 120.0]])
+        mock_masks = MagicMock()
+        mock_masks.__len__ = MagicMock(return_value=1)
+        mock_masks.xy = [poly]
+
+        result = MagicMock()
+        result.names = {0: "cat"}
+        result.boxes = [box]
+        result.obb = None
+        result.keypoints = None
+        result.masks = mock_masks
+
+        detections = parse_results([result])
+        assert len(detections) == 1
+        assert detections[0]["type"] == "polygon"
+        assert detections[0]["class_name"] == "cat"
+        assert len(detections[0]["points"]) == 4
+        assert detections[0]["points"][0] == (10.0, 20.0)
+        assert detections[0]["bbox"]["x1"] == 10
+
+    def test_mask_fallback_to_bbox(self):
+        box = _make_mock_box(1, 0.7, 1, 2, 3, 4)
+        mock_masks = MagicMock()
+        mock_masks.__len__ = MagicMock(return_value=1)
+        mock_masks.xy = [np.array([[1.0, 2.0]])]  # too few points
+
+        result = MagicMock()
+        result.names = {1: "dog"}
+        result.boxes = [box]
+        result.obb = None
+        result.keypoints = None
+        result.masks = mock_masks
+
+        detections = parse_results([result])
+        assert len(detections) == 1
+        assert detections[0]["type"] == "bbox"
+        assert detections[0]["class_id"] == 1
+
+
 class TestParseResultsMultipleResults:
     """Tests for parsing multiple result objects."""
 

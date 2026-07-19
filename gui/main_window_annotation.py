@@ -86,7 +86,7 @@ class AnnotationWorkbenchMixin:
             (CanvasMode.CREATE_BBOX, "框", "绘制矩形框 (R)"),
             (CanvasMode.CREATE_POLYGON, "多", "绘制多边形 (P)"),
             (CanvasMode.CREATE_OBB, "旋", "绘制旋转框 (O)"),
-            (CanvasMode.CREATE_KEYPOINT, "点", "创建关键点 (K)"),
+            (CanvasMode.CREATE_KEYPOINT, "点", "关键点：左键加点，Enter/右键结束 (K)"),
         ]:
             btn = QPushButton(label)
             btn.setObjectName("ToolButton")
@@ -1075,10 +1075,22 @@ class AnnotationWorkbenchMixin:
             return
         self._start_yolo_auto_label(list(self.image_list))
 
-    def _start_yolo_auto_label(self, image_paths: list[str]) -> None:
+    def _start_yolo_auto_label(
+        self,
+        image_paths: list[str],
+        *,
+        quiet: bool = False,
+        on_finished=None,
+        on_error=None,
+    ) -> bool:
         if self._yolo_label_thread and self._yolo_label_thread.isRunning():
-            QMessageBox.warning(self, "提示", "YOLO 自动标注正在进行")
-            return
+            if not quiet:
+                QMessageBox.warning(self, "提示", "YOLO 自动标注正在进行")
+            return False
+
+        self._yolo_label_quiet = quiet
+        self._yolo_label_on_finished = on_finished
+        self._yolo_label_on_error = on_error
 
         self.yolo_progress_bar.setValue(0)
         self.yolo_progress_bar.setVisible(True)
@@ -1102,6 +1114,7 @@ class AnnotationWorkbenchMixin:
         self._yolo_label_worker.finished.connect(self._yolo_label_thread.quit)
         self._yolo_label_worker.error.connect(self._yolo_label_thread.quit)
         self._yolo_label_thread.start()
+        return True
 
     def _on_yolo_auto_label_progress(self, current: int, total: int, image_path: str) -> None:
         value = int(current / total * 100) if total else 0
@@ -1109,15 +1122,23 @@ class AnnotationWorkbenchMixin:
         self._set_model_status(f"{current}/{total}", None)
 
     def _on_yolo_auto_label_finished(self, results: dict) -> None:
+        quiet = getattr(self, "_yolo_label_quiet", False)
+        on_finished = getattr(self, "_yolo_label_on_finished", None)
+        on_error = getattr(self, "_yolo_label_on_error", None)
         total_boxes = 0
         current_abs = os.path.normcase(os.path.abspath(self.current_image_path)) if self.current_image_path else ""
         current_shapes = None
-        target_class_id = self._class_id_for_yolo_auto_label()
+        target_class_id = self._class_id_for_yolo_auto_label(allow_prompt=not quiet)
         if target_class_id is None:
             self._set_model_status("需先创建类别", False)
             self.yolo_progress_bar.setVisible(False)
             self.yolo_current_btn.setEnabled(True)
             self.yolo_all_btn.setEnabled(True)
+            if on_error is not None:
+                on_error("需先创建类别")
+            elif on_finished is not None:
+                on_finished({})
+            self._cleanup_yolo_label()
             return
         for image_path, detections in results.items():
             image_abs = os.path.normcase(os.path.abspath(image_path))
@@ -1148,24 +1169,36 @@ class AnnotationWorkbenchMixin:
             self.annot_list.refresh(current_shapes)
             self._set_dirty(False)
             self.file_list.load_image_list(self.image_list)
-        self.file_list.highlight_current(self.current_image_index)
+        if self.current_image_index >= 0:
+            self.file_list.highlight_current(self.current_image_index)
         self.yolo_progress_bar.setValue(100)
         self.yolo_progress_bar.setVisible(False)
         self._set_model_status(f"完成 {len(results)}张/{total_boxes}框", True)
         self.yolo_current_btn.setEnabled(True)
         self.yolo_all_btn.setEnabled(True)
-        self._maybe_offer_training_after_annotation()
+        if not quiet:
+            self._maybe_offer_training_after_annotation()
+        if on_finished is not None:
+            on_finished(results)
         self._cleanup_yolo_label()
 
     def _on_yolo_auto_label_error(self, error_msg: str) -> None:
+        quiet = getattr(self, "_yolo_label_quiet", False)
+        on_error = getattr(self, "_yolo_label_on_error", None)
         self.yolo_progress_bar.setVisible(False)
         self._set_model_status("标注失败", False)
         self.yolo_current_btn.setEnabled(True)
         self.yolo_all_btn.setEnabled(True)
-        QMessageBox.critical(self, "YOLO 自动标注失败", error_msg)
+        if on_error is not None:
+            on_error(error_msg)
+        elif not quiet:
+            QMessageBox.critical(self, "YOLO 自动标注失败", error_msg)
         self._cleanup_yolo_label()
 
     def _cleanup_yolo_label(self) -> None:
+        self._yolo_label_quiet = False
+        self._yolo_label_on_finished = None
+        self._yolo_label_on_error = None
         if self._yolo_label_thread is not None:
             if self._yolo_label_thread.isRunning():
                 self._yolo_label_thread.quit()
@@ -1176,7 +1209,7 @@ class AnnotationWorkbenchMixin:
             self._yolo_label_worker.deleteLater()
             self._yolo_label_worker = None
 
-    def _class_id_for_yolo_auto_label(self) -> Optional[int]:
+    def _class_id_for_yolo_auto_label(self, *, allow_prompt: bool = True) -> Optional[int]:
         if self.yolo_model_class_check.isChecked():
             return -1
         classes = self.class_manager.get_all_classes()
@@ -1185,6 +1218,8 @@ class AnnotationWorkbenchMixin:
             if 0 <= class_id < len(classes):
                 return class_id
             return 0
+        if not allow_prompt:
+            return None
         return self._create_class_from_prompt("新建自动标注类别", "类别名称:")
 
     def _detections_to_shapes(self, detections: list, target_class_id: Optional[int] = None) -> list[dict]:
@@ -1232,6 +1267,20 @@ class AnnotationWorkbenchMixin:
                         "confidence": confidence,
                     })
                 continue
+
+            # --- Segment polygon ---
+            if det_type == "polygon":
+                points = detection.get("points") or []
+                if len(points) >= 3:
+                    shapes.append({
+                        "type": ShapeType.POLYGON,
+                        "class_id": class_id,
+                        "class_name": class_name,
+                        "data": {"points": [(float(p[0]), float(p[1])) for p in points]},
+                        "confidence": confidence,
+                    })
+                    continue
+                # Fall through to bbox if mask points are unusable
 
             # --- Keypoint / Pose shape ---
             if det_type == "keypoint":
@@ -1492,8 +1541,12 @@ class AnnotationWorkbenchMixin:
         if not self.current_project:
             QMessageBox.warning(self, "提示", "请先选择一个项目")
             return False
-        if self.current_project.get("task", "detect") != "detect":
-            QMessageBox.information(self, "提示", "功能还在完善，敬请期待")
+        task = self.current_project.get("task", "detect")
+        if task == "classify":
+            QMessageBox.information(
+                self, "提示",
+                "分类任务不用画框，按类别建文件夹就行。",
+            )
             return False
         return True
 
@@ -1508,12 +1561,16 @@ class AnnotationWorkbenchMixin:
         return class_id, classes[class_id]
 
     def _llm_detections_to_shapes(
+        self,
         detections,
         image_width: int,
         image_height: int,
         class_id: int,
         class_name: str,
     ) -> list[dict]:
+        task = "detect"
+        if self.current_project:
+            task = str(self.current_project.get("task", "detect")).lower()
         shapes = []
         for _label, x1, y1, x2, y2 in detections:
             m = max(abs(x1), abs(y1), abs(x2), abs(y2))
@@ -1538,13 +1595,54 @@ class AnnotationWorkbenchMixin:
             abs_y1, abs_y2 = sorted((abs_y1, abs_y2))
             if abs_x2 - abs_x1 < 2 or abs_y2 - abs_y1 < 2:
                 continue
-            shapes.append({
-                "type": ShapeType.BBOX,
+            shapes.append(self._llm_box_to_task_shape(
+                task, abs_x1, abs_y1, abs_x2, abs_y2, class_id, class_name,
+            ))
+        return shapes
+
+    def _llm_box_to_task_shape(
+        self,
+        task: str,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        class_id: int,
+        class_name: str,
+    ) -> dict:
+        if task == "segment":
+            return {
+                "type": ShapeType.POLYGON,
                 "class_id": class_id,
                 "class_name": class_name,
-                "data": {"x1": abs_x1, "y1": abs_y1, "x2": abs_x2, "y2": abs_y2},
-            })
-        return shapes
+                "data": {"points": [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]},
+            }
+        if task == "obb":
+            return {
+                "type": ShapeType.OBB,
+                "class_id": class_id,
+                "class_name": class_name,
+                "data": {"corners": [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]},
+            }
+        if task == "pose":
+            cx = (x1 + x2) / 2.0
+            cy = (y1 + y2) / 2.0
+            return {
+                "type": ShapeType.KEYPOINT,
+                "class_id": class_id,
+                "class_name": class_name,
+                "data": {
+                    "x1": float(x1), "y1": float(y1),
+                    "x2": float(x2), "y2": float(y2),
+                    "keypoints": [(cx, cy, 2)],
+                },
+            }
+        return {
+            "type": ShapeType.BBOX,
+            "class_id": class_id,
+            "class_name": class_name,
+            "data": {"x1": float(x1), "y1": float(y1), "x2": float(x2), "y2": float(y2)},
+        }
 
     def _on_llm_error(self, error_msg: str):
         self.statusBar().showMessage(f"LLM 错误: {error_msg}", 5000)
@@ -1556,6 +1654,8 @@ class AnnotationWorkbenchMixin:
 
     def _run_llm_free_detect(self):
         """LLM 自由检测 — 让模型自己发现所有物体并自动创建类别."""
+        if not self._is_llm_detect_project():
+            return
         if not self.current_image_path:
             QMessageBox.warning(self, "提示", "请先打开图片")
             return
@@ -1654,12 +1754,12 @@ class AnnotationWorkbenchMixin:
                 classes = self.class_manager.get_all_classes()
                 logger.info(f"自由检测自动创建类别: {label} (id={class_id})")
 
-            shapes.append({
-                "type": ShapeType.BBOX,
-                "class_id": class_id,
-                "class_name": label,
-                "data": {"x1": abs_x1, "y1": abs_y1, "x2": abs_x2, "y2": abs_y2},
-            })
+            task = "detect"
+            if self.current_project:
+                task = str(self.current_project.get("task", "detect")).lower()
+            shapes.append(self._llm_box_to_task_shape(
+                task, abs_x1, abs_y1, abs_x2, abs_y2, class_id, label,
+            ))
 
         return shapes
 

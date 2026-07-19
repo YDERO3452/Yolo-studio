@@ -25,12 +25,18 @@ class YOLOAutoLabelWorker(QObject):
         self.conf = conf
         self.iou = iou
         self.max_det = max_det
+        self._running = True
+
+    def stop(self) -> None:
+        self._running = False
 
     def run(self) -> None:
         try:
             results = {}
             total = len(self.image_paths)
             for index, image_path in enumerate(self.image_paths, start=1):
+                if not self._running:
+                    break
                 detections = self.model_manager.predict(
                     image_path,
                     conf=self.conf,

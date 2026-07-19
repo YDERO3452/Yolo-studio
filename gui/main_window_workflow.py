@@ -1,4 +1,4 @@
-"""Workflow canvas execution handlers for MainWindow."""
+"""Workflow run handlers mixed into MainWindow."""
 
 from __future__ import annotations
 
@@ -8,14 +8,21 @@ from typing import Optional
 
 from gui.workflow_executor import WorkflowExecutor
 
+_TASK_MODEL = {
+    "detect": "yolo11n.pt",
+    "segment": "yolo11n-seg.pt",
+    "pose": "yolo11n-pose.pt",
+    "obb": "yolo11n-obb.pt",
+    "classify": "yolo11n-cls.pt",
+}
+
 
 class WorkflowOpsMixin:
     def _setup_workflow_executor(self) -> None:
-        """Wire node canvas run/stop to real panel actions."""
         self.workflow_executor = WorkflowExecutor(self)
         panel = self.workflow_panel
         panel.run_requested.connect(self._start_workflow_run)
-        panel.stop_requested.connect(self.workflow_executor.stop)
+        panel.stop_requested.connect(self._stop_workflow_run)
 
         ex = self.workflow_executor
         ex.log.connect(panel.append_log)
@@ -37,18 +44,47 @@ class WorkflowOpsMixin:
     def _start_workflow_run(self) -> None:
         if self.workflow_executor.is_running:
             return
-        # Close any open overlay so the run starts from the canvas.
         if hasattr(self, "_return_to_workflow"):
             self._return_to_workflow()
         keys, edges = self.workflow_panel.collect_graph()
-        # Only mark runnable (main) nodes; sub/utility nodes stay out of the run.
         self.workflow_panel.reset_all_status()
         for k in keys:
             self.workflow_panel.set_node_status(k, "pending")
         self.workflow_executor.start(keys, edges)
 
+    def _stop_workflow_run(self) -> None:
+        self.workflow_executor.stop()
+        self._abort_workflow_jobs()
+
+    def _abort_workflow_jobs(self) -> None:
+        try:
+            self.training_panel.stop_training()
+        except Exception:
+            pass
+        try:
+            self.inference_panel.stop_batch_inference()
+        except Exception:
+            pass
+        try:
+            self.inference_panel.stop_inference()
+        except Exception:
+            pass
+        try:
+            self.export_panel.stop_export()
+        except Exception:
+            pass
+        worker = getattr(self, "_yolo_label_worker", None)
+        if worker is not None and hasattr(worker, "stop"):
+            try:
+                worker.stop()
+            except Exception:
+                pass
+
     def _on_workflow_pipeline_finished(self, ok: bool, summary: str) -> None:
         self.workflow_panel.set_running_ui(False)
+        for key, node in getattr(self.workflow_panel, "nodes", {}).items():
+            if getattr(node, "status", "") == "pending":
+                self.workflow_panel.set_node_status(key, "skipped", "已跳过")
         self.workflow_panel.append_log(("✓ " if ok else "✗ ") + summary)
         self.statusBar().showMessage(summary, 5000)
 
@@ -70,14 +106,25 @@ class WorkflowOpsMixin:
 
     def _wf_run_dataset(self, key: str, ex: WorkflowExecutor) -> None:
         yaml_path = self._wf_resolve_data_yaml()
+        if not yaml_path and self.current_project and self.current_project.get("root"):
+            try:
+                from core.project_manager import ProjectManager
+
+                yaml_path = ProjectManager().build_data_yaml(self.current_project)
+                if yaml_path:
+                    self.dataset_panel.data_yaml_edit.setText(yaml_path)
+                    self.training_panel.data_yaml_edit.setText(yaml_path)
+                    self.workflow_panel.append_log(f"已自动生成 data.yaml: {yaml_path}")
+            except Exception as exc:
+                ex.finish_node(key, False, f"生成 data.yaml 失败: {exc}")
+                return
         if not yaml_path:
-            ex.finish_node(key, False, "未找到 data.yaml，请先在「数据」页加载或创建")
+            ex.finish_node(key, False, "未找到 data.yaml，请先打开项目或在「数据」页创建")
             return
         from core.dataset import DatasetManager
 
         dataset_dir = str(Path(yaml_path).resolve().parent)
         issues = DatasetManager(dataset_dir).validate_dataset(dataset_dir)
-        # Sync yaml into training panel for later nodes
         self.training_panel.data_yaml_edit.setText(yaml_path)
         self.dataset_panel.data_yaml_edit.setText(yaml_path)
         if issues:
@@ -87,9 +134,19 @@ class WorkflowOpsMixin:
 
     def _wf_run_annotate(self, key: str, ex: WorkflowExecutor) -> None:
         if not self.image_list:
-            ex.finish_node(key, False, "无图片 — 请先打开图片目录")
-            return
+            if self.current_project and self.current_project.get("root"):
+                from core.project_manager import ProjectManager
+
+                images = ProjectManager.list_images(self.current_project)
+                if images:
+                    self.image_list = images
+                    self.current_image_dir = str(Path(self.current_project["root"]) / "images")
+            if not self.image_list:
+                ex.finish_node(key, False, "无图片 — 请先打开项目或图片目录")
+                return
+
         labeled = 0
+        unlabeled: list[str] = []
         for image_path in self.image_list:
             try:
                 from gui.annotation_io import label_path_for_image
@@ -97,11 +154,59 @@ class WorkflowOpsMixin:
                 lp = label_path_for_image(image_path)
                 if lp and os.path.isfile(lp) and os.path.getsize(lp) > 0:
                     labeled += 1
+                else:
+                    unlabeled.append(image_path)
             except Exception:
-                continue
+                unlabeled.append(image_path)
+
         total = len(self.image_list)
-        # Annotation is a human gate: pass if there is at least a queue.
-        ex.finish_node(key, True, f"队列 {total}，已标注 {labeled}")
+        if not unlabeled:
+            ex.finish_node(key, True, f"已全部标注 {total}")
+            return
+
+        if self.model_manager.is_model_loaded():
+            self.workflow_panel.append_log(
+                f"标注节点: 自动标注未标注图片 {len(unlabeled)}/{total}"
+            )
+
+            def _on_done(results: dict) -> None:
+                if ex.stop_requested:
+                    ex.finish_node(
+                        key, False,
+                        f"已停止（已处理 {len(results)} 张）",
+                    )
+                    return
+                boxes = sum(len(v or []) for v in results.values())
+                ex.finish_node(
+                    key, True,
+                    f"自动标注 {len(results)} 张 / {boxes} 检测（合计队列 {total}）",
+                )
+
+            def _on_error(msg: str) -> None:
+                if ex.stop_requested:
+                    ex.finish_node(key, False, "已停止")
+                    return
+                ex.finish_node(key, False, f"自动标注失败: {msg}")
+
+            started = self._start_yolo_auto_label(
+                unlabeled,
+                quiet=True,
+                on_finished=_on_done,
+                on_error=_on_error,
+            )
+            if not started:
+                ex.finish_node(
+                    key,
+                    True,
+                    f"队列 {total}，已标注 {labeled}（自动标注忙，作人工门禁通过）",
+                )
+            return
+
+        ex.finish_node(
+            key,
+            True,
+            f"队列 {total}，已标注 {labeled}，未标 {len(unlabeled)}（未加载模型，跳过自动标注）",
+        )
 
     def _wf_run_train(self, key: str, ex: WorkflowExecutor) -> None:
         yaml_path = self._wf_resolve_data_yaml()
@@ -113,6 +218,9 @@ class WorkflowOpsMixin:
                 self.training_panel.training_finished.disconnect(_on_finished)
             except TypeError:
                 pass
+            if ex.stop_requested:
+                ex.finish_node(key, False, "已停止")
+                return
             ok = bool(result.get("success"))
             msg = result.get("save_dir") or result.get("error") or ("完成" if ok else "失败")
             if ok and isinstance(msg, str) and len(msg) > 40:
@@ -191,6 +299,9 @@ class WorkflowOpsMixin:
                 self.inference_panel.batch_inference_finished.disconnect(_on_batch_done)
             except TypeError:
                 pass
+            if ex.stop_requested:
+                ex.finish_node(key, False, f"已停止（已处理 {total}）")
+                return
             ex.finish_node(key, True, f"处理 {total} 张")
 
         self.inference_panel.batch_inference_finished.connect(_on_batch_done)
@@ -216,6 +327,9 @@ class WorkflowOpsMixin:
                 self.export_panel.export_finished.disconnect(_on_export_done)
             except TypeError:
                 pass
+            if ex.stop_requested:
+                ex.finish_node(key, False, "已停止")
+                return
             ok = bool(result.get("success"))
             msg = result.get("path") or result.get("error") or ""
             if ok and isinstance(msg, str) and len(msg) > 48:
@@ -250,7 +364,42 @@ class WorkflowOpsMixin:
             detail += f"，缺标{missing}"
         ex.finish_node(key, True, detail)
 
+    def _apply_project_task(self, task: str) -> None:
+        from gui.canvas import CanvasMode
+
+        task = (task or "detect").lower()
+        mode_map = {
+            "detect": CanvasMode.CREATE_BBOX,
+            "segment": CanvasMode.CREATE_POLYGON,
+            "pose": CanvasMode.CREATE_KEYPOINT,
+            "obb": CanvasMode.CREATE_OBB,
+            "classify": CanvasMode.EDIT,
+        }
+        mode = mode_map.get(task, CanvasMode.CREATE_BBOX)
+        if hasattr(self, "_set_canvas_mode"):
+            self._set_canvas_mode(mode)
+        elif hasattr(self, "canvas"):
+            self.canvas.set_mode(mode)
+
+        if hasattr(self, "canvas") and hasattr(self.canvas, "num_keypoints"):
+            self.canvas.num_keypoints = 17 if task == "pose" else 0
+
+        model = _TASK_MODEL.get(task)
+        if model and hasattr(self, "training_panel"):
+            combo = getattr(self.training_panel, "model_combo", None)
+            if combo is not None:
+                current = combo.currentText().strip().lower()
+                if not current or current in {
+                    "yolo11n.pt", "yolov8n.pt", "yolo11n-seg.pt",
+                    "yolo11n-pose.pt", "yolo11n-obb.pt", "yolo11n-cls.pt",
+                }:
+                    combo.setCurrentText(model)
+
+        if task == "classify" and hasattr(self, "statusBar"):
+            self.statusBar().showMessage(
+                "分类任务一般用文件夹当类别，画布已切到选择模式", 5000
+            )
+
     # ------------------------------------------------------------------
     # Workspace switching
     # ------------------------------------------------------------------
-

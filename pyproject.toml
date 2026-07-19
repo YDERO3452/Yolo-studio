@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "yolo-studio"
 version = "1.0.0"
-description = "基于 PyQt6 的 YOLO 目标检测标注与训练桌面应用"
+description = "PyQt6 YOLO desktop app: annotate, train, infer, export"
 readme = "README.md"
 license = "GPL-3.0-only"
 requires-python = ">=3.10"
 authors = [
   {name = "YDERO3452"},
 ]
-keywords = ["yolo", "object-detection", "annotation", "training", "pyqt6"]
+keywords = ["yolo", "annotation", "training", "pyqt6", "ultralytics"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Science/Research",
