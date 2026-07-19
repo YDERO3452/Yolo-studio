@@ -75,7 +75,11 @@ def main():
 
     # 创建应用
     app = QApplication(sys.argv)
-    # Pin light color scheme before any widget is created (blocks Windows dark bleed).
+    # Pin light chrome before any widget is created (blocks Windows dark bleed).
+    try:
+        app.setStyle("Fusion")
+    except Exception:
+        pass
     try:
         from PyQt6.QtCore import Qt as _Qt
 

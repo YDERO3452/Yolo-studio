@@ -8,13 +8,13 @@ from PyQt6.QtWidgets import QApplication
 
 
 class Theme:
-    BG = "#F5F5F5"
-    RAIL = "#F0F0F0"
+    BG = "#F7F7F7"
+    RAIL = "#F3F3F3"
     SURFACE = "#FAFAFA"
     SURFACE_2 = "#FFFFFF"
-    SURFACE_3 = "#EEEEEE"
-    BORDER = "#D0D0D0"
-    BORDER_STRONG = "#B8B8B8"
+    SURFACE_3 = "#F0F0F0"
+    BORDER = "#D6D6D6"
+    BORDER_STRONG = "#C0C0C0"
     TEXT = "#222222"
     TEXT_MUTED = "#555555"
     TEXT_DIM = "#777777"
@@ -28,8 +28,20 @@ class Theme:
     # Match white panels — no gray stage slab that reads as dark-mode leftover
     CANVAS_BG = "#FFFFFF"
     CANVAS_HINT = "#555555"
-    SCROLL_HANDLE = "#D0D0D0"
-    SCROLL_HANDLE_HOVER = "#BDBDBD"
+    SCROLL_HANDLE = "#D6D6D6"
+    SCROLL_HANDLE_HOVER = "#C4C4C4"
+
+
+def soften_hex(color: str, amount: float = 0.72) -> str:
+    """Blend a saturated accent toward white for light-theme chrome bars."""
+    c = QColor(color)
+    if not c.isValid():
+        return Theme.ACCENT
+    amount = max(0.0, min(1.0, amount))
+    r = int(round(c.red() + (255 - c.red()) * amount))
+    g = int(round(c.green() + (255 - c.green()) * amount))
+    b = int(round(c.blue() + (255 - c.blue()) * amount))
+    return QColor(r, g, b).name()
 
 
 def apply_light_palette(app: QApplication | None = None) -> None:
@@ -37,6 +49,11 @@ def apply_light_palette(app: QApplication | None = None) -> None:
     app = app or QApplication.instance()
     if app is None:
         return
+
+    try:
+        app.setStyle("Fusion")
+    except Exception:
+        pass
 
     try:
         app.styleHints().setColorScheme(Qt.ColorScheme.Light)
@@ -214,7 +231,7 @@ def build_stylesheet() -> str:
     }}
     QLabel#StatusPill {{
         color: {Theme.TEXT_MUTED};
-        background: {Theme.SURFACE_3};
+        background: {Theme.SURFACE_2};
         border: 1px solid {Theme.BORDER};
         border-radius: 0px;
         padding: 1px 6px;
@@ -574,9 +591,18 @@ def build_stylesheet() -> str:
         spacing: 4px;
     }}
     QStatusBar {{
-        background: {Theme.SURFACE};
+        background: {Theme.SURFACE_2};
         color: {Theme.TEXT_MUTED};
         border-top: 1px solid {Theme.BORDER};
+    }}
+    QStatusBar QLabel {{
+        background: transparent;
+        border: none;
+        color: {Theme.TEXT_MUTED};
+        padding: 0 6px;
+    }}
+    QStatusBar::item {{
+        border: none;
     }}
     QMenuBar {{
         background: {Theme.SURFACE};

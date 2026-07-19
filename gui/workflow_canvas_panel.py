@@ -36,7 +36,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from gui.theme import Theme
+from gui.theme import Theme, soften_hex
 
 
 @dataclass(frozen=True)
@@ -212,10 +212,10 @@ class WorkflowNode(QGraphicsRectItem):
         self.setPen(QPen(QColor(Theme.BORDER), 1.2))
         self.setCursor(Qt.CursorShape.OpenHandCursor)
 
-        accent_w = 3 if kind == "sub" else 3
-        accent_color = QColor(spec.accent)
+        accent_w = 3
+        accent_color = QColor(soften_hex(spec.accent, amount=0.55))
         if kind != "main":
-            accent_color.setAlpha(180)
+            accent_color.setAlpha(200)
         self._accent = QGraphicsRectItem(0, 0, accent_w, h, self)
         self._accent.setBrush(QBrush(accent_color))
         self._accent.setPen(QPen(Qt.PenStyle.NoPen))

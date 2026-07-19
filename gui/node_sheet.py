@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from gui.theme import Theme
+from gui.theme import Theme, soften_hex
 
 
 class NodeSheet(QWidget):
@@ -32,7 +32,7 @@ class NodeSheet(QWidget):
         self._accent_bar = QFrame()
         self._accent_bar.setObjectName("NodeSheetAccent")
         self._accent_bar.setFixedWidth(3)
-        self._accent_bar.setStyleSheet(f"background: {self._accent}; border: none;")
+        self._set_accent_bar(self._accent)
         root.addWidget(self._accent_bar)
 
         main = QWidget()
@@ -81,7 +81,7 @@ class NodeSheet(QWidget):
             f"""
             QWidget#NodeSheet {{
                 background: {Theme.SURFACE_2};
-                border: 1px solid {Theme.BORDER_STRONG};
+                border: 1px solid {Theme.BORDER};
             }}
             QWidget#NodeSheetHeader {{
                 background: {Theme.SURFACE};
@@ -93,13 +93,18 @@ class NodeSheet(QWidget):
             """
         )
 
+    def _set_accent_bar(self, accent: str) -> None:
+        # Soft pastel strip — saturated stage colors read as dark-mode leftovers on light chrome.
+        soft = soften_hex(accent, amount=0.78)
+        self._accent_bar.setStyleSheet(f"background: {soft}; border: none;")
+
     def set_meta(self, title: str, subtitle: str = "", accent: str | None = None) -> None:
         self.title_label.setText(title)
         self.subtitle_label.setText(subtitle)
         self.subtitle_label.setVisible(bool(subtitle))
         if accent:
             self._accent = accent
-            self._accent_bar.setStyleSheet(f"background: {accent}; border: none;")
+            self._set_accent_bar(accent)
 
     def set_body(self, widget: QWidget) -> None:
         while self.body_layout.count():
