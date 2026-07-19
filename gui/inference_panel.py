@@ -13,7 +13,6 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -305,111 +304,116 @@ class InferencePanel(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
 
-        # =====================================================================
-        # Compact top toolbar: model + settings + source controls in one row
-        # =====================================================================
-        toolbar = QHBoxLayout()
-        toolbar.setSpacing(8)
+        # Keep model selection and execution controls on separate rows so the
+        # toolbar remains readable when the workspace is narrower than 1600px.
+        model_row = QHBoxLayout()
+        model_row.setSpacing(8)
 
-        # --- Model path + load ---
+        model_label = QLabel("模型")
+        model_label.setObjectName("MutedText")
+        model_row.addWidget(model_label)
+
         self.model_path_edit = QLineEdit()
         self.model_path_edit.setPlaceholderText("模型文件 (.pt)")
-        self.model_path_edit.setMinimumWidth(200)
-        toolbar.addWidget(self.model_path_edit)
+        self.model_path_edit.setMinimumWidth(260)
+        model_row.addWidget(self.model_path_edit, stretch=2)
 
         model_browse = QPushButton("浏览")
-        model_browse.setFixedWidth(50)
+        model_browse.setObjectName("QuietButton")
         model_browse.clicked.connect(self.browse_model)
-        toolbar.addWidget(model_browse)
+        model_row.addWidget(model_browse)
 
         self.load_model_btn = QPushButton("加载")
-        self.load_model_btn.setFixedWidth(50)
+        self.load_model_btn.setObjectName("SecondaryButton")
         self.load_model_btn.clicked.connect(self.load_model)
-        toolbar.addWidget(self.load_model_btn)
+        model_row.addWidget(self.load_model_btn)
 
-        toolbar.addWidget(QLabel("|"))
+        recent_label = QLabel("最近训练")
+        recent_label.setObjectName("MutedText")
+        model_row.addWidget(recent_label)
 
-        # --- Recent models dropdown ---
         self.recent_model_combo = QComboBox()
         self.recent_model_combo.setPlaceholderText("最近训练...")
-        self.recent_model_combo.setMinimumWidth(160)
+        self.recent_model_combo.setMinimumWidth(200)
         self._refresh_recent_models()
         self.recent_model_combo.currentTextChanged.connect(self._on_recent_model_selected)
-        toolbar.addWidget(self.recent_model_combo)
+        model_row.addWidget(self.recent_model_combo, stretch=1)
 
         refresh_btn = QPushButton("刷新")
-        refresh_btn.setFixedWidth(50)
+        refresh_btn.setObjectName("QuietButton")
         refresh_btn.setToolTip("刷新最近模型列表")
         refresh_btn.clicked.connect(self._refresh_recent_models)
-        toolbar.addWidget(refresh_btn)
+        model_row.addWidget(refresh_btn)
 
-        toolbar.addWidget(QLabel("|"))
+        self.runtime_status_label = StatusPill("就绪")
+        model_row.addWidget(self.runtime_status_label)
+        layout.addLayout(model_row)
 
-        # --- Inference params (compact) ---
-        toolbar.addWidget(QLabel("置信度"))
+        control_row = QHBoxLayout()
+        control_row.setSpacing(8)
+
+        params_label = QLabel("推理参数")
+        params_label.setObjectName("MutedText")
+        control_row.addWidget(params_label)
+
+        control_row.addWidget(QLabel("置信度"))
         self.conf_spin = QDoubleSpinBox()
         self.conf_spin.setRange(0.01, 1.0)
         self.conf_spin.setValue(0.25)
         self.conf_spin.setDecimals(2)
-        self.conf_spin.setFixedWidth(60)
-        toolbar.addWidget(self.conf_spin)
+        self.conf_spin.setFixedWidth(72)
+        control_row.addWidget(self.conf_spin)
 
-        toolbar.addWidget(QLabel("IoU"))
+        control_row.addWidget(QLabel("IoU"))
         self.iou_spin = QDoubleSpinBox()
         self.iou_spin.setRange(0.01, 1.0)
         self.iou_spin.setValue(0.7)
         self.iou_spin.setDecimals(2)
-        self.iou_spin.setFixedWidth(60)
-        toolbar.addWidget(self.iou_spin)
+        self.iou_spin.setFixedWidth(72)
+        control_row.addWidget(self.iou_spin)
 
-        toolbar.addWidget(QLabel("分辨率"))
+        control_row.addWidget(QLabel("分辨率"))
         self.imgsz_combo = QComboBox()
         self.imgsz_combo.addItems(["320", "416", "640", "1280"])
         self.imgsz_combo.setCurrentIndex(2)
-        self.imgsz_combo.setFixedWidth(60)
+        self.imgsz_combo.setFixedWidth(76)
         self.imgsz_combo.setToolTip("推理分辨率")
-        toolbar.addWidget(self.imgsz_combo)
+        control_row.addWidget(self.imgsz_combo)
 
         self.half_check = QCheckBox("FP16")
         self.half_check.setChecked(True)
         self.half_check.setToolTip("GPU 半精度加速")
-        toolbar.addWidget(self.half_check)
+        control_row.addWidget(self.half_check)
 
-        toolbar.addStretch()
-
-        # --- Source buttons (plain text, no emoji) ---
-        self.image_btn = QPushButton("图片")
-        self.image_btn.clicked.connect(self.predict_image)
-        toolbar.addWidget(self.image_btn)
-
-        self.video_btn = QPushButton("视频")
-        self.video_btn.clicked.connect(self.predict_video)
-        toolbar.addWidget(self.video_btn)
-
-        self.webcam_btn = QPushButton("摄像头")
-        self.webcam_btn.clicked.connect(self.predict_webcam)
-        toolbar.addWidget(self.webcam_btn)
-
-        self.stop_btn = QPushButton("停止")
-        self.stop_btn.setEnabled(False)
-        self.stop_btn.clicked.connect(self.stop_inference)
-        toolbar.addWidget(self.stop_btn)
-
-        self.runtime_status_label = StatusPill("就绪")
-        toolbar.addWidget(self.runtime_status_label)
-
-        layout.addLayout(toolbar)
-
-        # --- Device info bar (thin, below toolbar) ---
-        dev_bar = QHBoxLayout()
         self.device_info_label = QLabel("设备: 检测中...")
         self.device_info_label.setStyleSheet("color: #8b949e; font-size: 11px;")
-        dev_bar.addWidget(self.device_info_label)
-        dev_bar.addStretch()
-        layout.addLayout(dev_bar)
+        control_row.addWidget(self.device_info_label)
+        control_row.addStretch()
+
+        self.image_btn = QPushButton("图片")
+        self.image_btn.setObjectName("PrimaryButton")
+        self.image_btn.clicked.connect(self.predict_image)
+        control_row.addWidget(self.image_btn)
+
+        self.video_btn = QPushButton("视频")
+        self.video_btn.setObjectName("SecondaryButton")
+        self.video_btn.clicked.connect(self.predict_video)
+        control_row.addWidget(self.video_btn)
+
+        self.webcam_btn = QPushButton("摄像头")
+        self.webcam_btn.setObjectName("SecondaryButton")
+        self.webcam_btn.clicked.connect(self.predict_webcam)
+        control_row.addWidget(self.webcam_btn)
+
+        self.stop_btn = QPushButton("停止")
+        self.stop_btn.setObjectName("QuietButton")
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.clicked.connect(self.stop_inference)
+        control_row.addWidget(self.stop_btn)
+        layout.addLayout(control_row)
         self._detect_device_info()
 
         # =====================================================================
@@ -434,8 +438,9 @@ class InferencePanel(QWidget):
         preview_layout.setSpacing(4)
 
         # Image display — THIS is the big preview area
-        self.image_label = QLabel("加载图片或视频开始推理")
+        self.image_label = QLabel("暂无推理预览\n运行图片、视频或摄像头推理后，画面将在此显示")
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_label.setWordWrap(True)
         self.image_label.setMinimumSize(640, 480)
         self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.image_label.setObjectName("PreviewSurface")
@@ -517,12 +522,15 @@ class InferencePanel(QWidget):
         results_layout.setContentsMargins(6, 6, 6, 6)
 
         results_header = QLabel("检测结果")
-        results_header.setStyleSheet("font-weight: bold; font-size: 12px;")
+        results_header.setObjectName("PanelTitle")
         results_layout.addWidget(results_header)
 
         self.results_text = QTextEdit()
         self.results_text.setReadOnly(True)
         self.results_text.setFont(QFont("monospace", 9))
+        self.results_text.setPlaceholderText(
+            "尚无检测结果\n推理完成后将在此显示类别、置信度与位置。"
+        )
         results_layout.addWidget(self.results_text)
 
         splitter.addWidget(results_widget)
@@ -536,50 +544,57 @@ class InferencePanel(QWidget):
         # Batch inference tab
         batch_tab = QWidget()
         batch_layout = QVBoxLayout(batch_tab)
+        batch_layout.setContentsMargins(12, 12, 12, 12)
+        batch_layout.setSpacing(8)
 
-        # Batch source
-        batch_source_group = QGroupBox("批量推理")
-        batch_source_layout = QVBoxLayout()
+        batch_header = QLabel("批量任务")
+        batch_header.setObjectName("PanelTitle")
+        batch_layout.addWidget(batch_header)
+
+        batch_subtitle = QLabel("选择图片目录，可选保存标注图，并导出结构化检测结果。")
+        batch_subtitle.setObjectName("MutedText")
+        batch_layout.addWidget(batch_subtitle)
 
         row1 = QHBoxLayout()
         self.batch_folder_edit = QLineEdit()
         self.batch_folder_edit.setPlaceholderText("选择图片文件夹...")
         batch_browse = QPushButton("浏览...")
+        batch_browse.setObjectName("QuietButton")
         batch_browse.clicked.connect(self.browse_batch_folder)
         row1.addWidget(self.batch_folder_edit)
         row1.addWidget(batch_browse)
-        batch_source_layout.addLayout(row1)
+        batch_layout.addLayout(row1)
 
         row2 = QHBoxLayout()
         self.batch_output_edit = QLineEdit()
         self.batch_output_edit.setPlaceholderText("输出目录 (可选)...")
         output_browse = QPushButton("浏览...")
+        output_browse.setObjectName("QuietButton")
         output_browse.clicked.connect(self.browse_batch_output)
         row2.addWidget(self.batch_output_edit)
         row2.addWidget(output_browse)
-        batch_source_layout.addLayout(row2)
+        batch_layout.addLayout(row2)
 
         row3 = QHBoxLayout()
         self.batch_start_btn = QPushButton("开始批量推理")
-        self.batch_start_btn.setObjectName("PrimaryButton")
+        self.batch_start_btn.setObjectName("SecondaryButton")
         self.batch_start_btn.clicked.connect(self.start_batch_inference)
 
         self.batch_stop_btn = QPushButton("停止")
-        self.batch_stop_btn.setObjectName("DangerButton")
+        self.batch_stop_btn.setObjectName("QuietButton")
         self.batch_stop_btn.setEnabled(False)
         self.batch_stop_btn.clicked.connect(self.stop_batch_inference)
 
         self.batch_export_btn = QPushButton("导出结果 (CSV)")
+        self.batch_export_btn.setObjectName("QuietButton")
         self.batch_export_btn.setEnabled(False)
         self.batch_export_btn.clicked.connect(self.export_batch_results)
 
         row3.addWidget(self.batch_start_btn)
         row3.addWidget(self.batch_stop_btn)
         row3.addWidget(self.batch_export_btn)
-        batch_source_layout.addLayout(row3)
-
-        batch_source_group.setLayout(batch_source_layout)
-        batch_layout.addWidget(batch_source_group)
+        row3.addStretch()
+        batch_layout.addLayout(row3)
 
         # Batch progress
         self.batch_progress = QProgressBar()
@@ -594,6 +609,9 @@ class InferencePanel(QWidget):
         self.batch_results_text = QTextEdit()
         self.batch_results_text.setReadOnly(True)
         self.batch_results_text.setFont(QFont("monospace", 9))
+        self.batch_results_text.setPlaceholderText(
+            "尚无批量推理结果\n任务运行后将在此显示每张图片的检测摘要。"
+        )
         batch_layout.addWidget(self.batch_results_text)
 
         self.inference_tabs.addTab(batch_tab, "批量推理")

@@ -15,6 +15,8 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QSplitter,
+    QStackedWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -35,16 +37,18 @@ class TrainingResultsPanel(QWidget):
         self.refresh_runs()
 
     def _build_ui(self) -> None:
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(12)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(6)
 
         left = QWidget()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(8)
-        left.setMinimumWidth(320)
-        left.setMaximumWidth(440)
+        left.setMinimumWidth(280)
 
         self.project_label = QLabel("训练结果")
         self.project_label.setObjectName("PanelTitle")
@@ -52,16 +56,28 @@ class TrainingResultsPanel(QWidget):
 
         self.run_list = QListWidget()
         self.run_list.itemSelectionChanged.connect(self._on_run_selected)
-        left_layout.addWidget(self.run_list, 1)
+
+        self._run_empty_label = QLabel(
+            "暂无训练运行\n完成训练后，运行记录会显示在这里。"
+        )
+        self._run_empty_label.setObjectName("MutedText")
+        self._run_empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._run_empty_label.setWordWrap(True)
+
+        self._run_stack = QStackedWidget()
+        self._run_stack.addWidget(self.run_list)
+        self._run_stack.addWidget(self._run_empty_label)
+        left_layout.addWidget(self._run_stack, 1)
 
         refresh_btn = QPushButton("刷新")
+        refresh_btn.setObjectName("QuietButton")
         refresh_btn.clicked.connect(self.refresh_runs)
         left_layout.addWidget(refresh_btn)
-        layout.addWidget(left)
+        splitter.addWidget(left)
 
         right = QWidget()
         right_layout = QVBoxLayout(right)
-        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setContentsMargins(8, 0, 0, 0)
         right_layout.setSpacing(8)
 
         self.detail_label = QLabel("未选择训练结果")
@@ -70,23 +86,43 @@ class TrainingResultsPanel(QWidget):
 
         self.detail_text = QTextEdit()
         self.detail_text.setReadOnly(True)
-        right_layout.addWidget(self.detail_text, 1)
+
+        self._detail_empty_label = QLabel(
+            "暂无结果详情\n选择左侧运行后，可查看指标、权重与生成的图表。"
+        )
+        self._detail_empty_label.setObjectName("MutedText")
+        self._detail_empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._detail_empty_label.setWordWrap(True)
+
+        self._detail_stack = QStackedWidget()
+        self._detail_stack.addWidget(self.detail_text)
+        self._detail_stack.addWidget(self._detail_empty_label)
+        right_layout.addWidget(self._detail_stack, 1)
 
         action_row = QHBoxLayout()
         self.infer_btn = QPushButton("用于推理")
         self.infer_btn.setObjectName("PrimaryButton")
         self.infer_btn.clicked.connect(self.load_for_inference)
         self.export_btn = QPushButton("用于导出")
+        self.export_btn.setObjectName("SecondaryButton")
         self.export_btn.clicked.connect(self.load_for_export)
         self.copy_model_btn = QPushButton("导出 best.pt")
+        self.copy_model_btn.setObjectName("QuietButton")
         self.copy_model_btn.clicked.connect(self.copy_best_model)
         self.copy_folder_btn = QPushButton("导出结果文件夹")
+        self.copy_folder_btn.setObjectName("QuietButton")
         self.copy_folder_btn.clicked.connect(self.copy_result_folder)
         for btn in (self.infer_btn, self.export_btn, self.copy_model_btn, self.copy_folder_btn):
+            btn.setEnabled(False)
             action_row.addWidget(btn)
         action_row.addStretch()
         right_layout.addLayout(action_row)
-        layout.addWidget(right, 1)
+        splitter.addWidget(right)
+
+        splitter.setSizes([340, 780])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        layout.addWidget(splitter, 1)
 
     def set_project(self, project: dict | None) -> None:
         self.current_project = project if project and project.get("root") else None
@@ -105,11 +141,16 @@ class TrainingResultsPanel(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, str(run_dir))
             self.run_list.addItem(item)
         if self.run_list.count():
+            self._run_stack.setCurrentWidget(self.run_list)
             self.run_list.setCurrentRow(0)
         else:
             self.current_run_dir = None
-            self.detail_label.setText("未找到训练结果")
-            self.detail_text.setPlainText("训练完成后会在这里显示 results.csv、weights/best.pt 和输出图表。")
+            self._run_stack.setCurrentWidget(self._run_empty_label)
+            self._detail_stack.setCurrentWidget(self._detail_empty_label)
+            self.detail_label.setText("训练结果详情")
+            self.detail_text.clear()
+            for btn in (self.infer_btn, self.export_btn, self.copy_model_btn, self.copy_folder_btn):
+                btn.setEnabled(False)
 
     def _find_runs(self) -> list[Path]:
         roots: list[Path] = []
@@ -128,6 +169,7 @@ class TrainingResultsPanel(QWidget):
     def _on_run_selected(self) -> None:
         items = self.run_list.selectedItems()
         if not items:
+            self._detail_stack.setCurrentWidget(self._detail_empty_label)
             return
         self.current_run_dir = items[0].data(Qt.ItemDataRole.UserRole)
         self._show_run(self.current_run_dir)
@@ -152,6 +194,9 @@ class TrainingResultsPanel(QWidget):
             lines.append("图表/预览:")
             lines.extend(f"  {name}" for name in artifacts[:24])
         self.detail_text.setPlainText("\n".join(lines))
+        self._detail_stack.setCurrentWidget(self.detail_text)
+        for btn in (self.infer_btn, self.export_btn, self.copy_model_btn, self.copy_folder_btn):
+            btn.setEnabled(True)
 
     def load_for_inference(self) -> None:
         best = self._best_model()

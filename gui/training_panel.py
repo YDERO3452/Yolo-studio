@@ -442,23 +442,31 @@ class TrainingPanel(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(10)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(6)
 
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_splitter.setHandleWidth(6)
+        main_splitter.setChildrenCollapsible(False)
 
         def create_tab():
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             content = QWidget()
             tab_layout = QVBoxLayout(content)
-            tab_layout.setContentsMargins(10, 10, 10, 10)
-            tab_layout.setSpacing(10)
+            tab_layout.setContentsMargins(6, 6, 6, 6)
+            tab_layout.setSpacing(4)
             scroll.setWidget(content)
             return scroll, tab_layout
 
+        def mark_quiet(*buttons):
+            for button in buttons:
+                button.setObjectName("QuietButton")
+
         settings_tabs = QTabWidget()
-        settings_tabs.setMinimumWidth(390)
+        settings_tabs.setMinimumWidth(350)
+        settings_tabs.setDocumentMode(True)
 
         # Model selection -- two-level: series to model
         model_group = QGroupBox("模型配置")
@@ -511,6 +519,7 @@ class TrainingPanel(QWidget):
         model_layout.addRow("预训练模型:", self.model_combo)
 
         self.custom_model_btn = QPushButton("浏览...")
+        mark_quiet(self.custom_model_btn)
         self.custom_model_btn.clicked.connect(self.browse_model)
         model_layout.addRow("自定义模型:", self.custom_model_btn)
 
@@ -524,6 +533,7 @@ class TrainingPanel(QWidget):
         self.data_yaml_edit = QLineEdit()
         self.data_yaml_edit.setPlaceholderText("选择 data.yaml 文件...")
         data_browse = QPushButton("浏览...")
+        mark_quiet(data_browse)
         data_browse.clicked.connect(self.browse_data_yaml)
         data_row = QHBoxLayout()
         data_row.addWidget(self.data_yaml_edit)
@@ -554,6 +564,7 @@ class TrainingPanel(QWidget):
         device_layout.addRow("硬件摘要:", self.gpu_info_label)
 
         self.refresh_gpu_btn = QPushButton("刷新设备信息")
+        mark_quiet(self.refresh_gpu_btn)
         self.refresh_gpu_btn.clicked.connect(self.refresh_gpu_info)
         device_layout.addRow("", self.refresh_gpu_btn)
 
@@ -566,6 +577,7 @@ class TrainingPanel(QWidget):
 
         self.project_edit = QLineEdit("runs/train")
         save_browse = QPushButton("浏览...")
+        mark_quiet(save_browse)
         save_browse.clicked.connect(self.browse_project)
         save_row = QHBoxLayout()
         save_row.addWidget(self.project_edit)
@@ -589,6 +601,7 @@ class TrainingPanel(QWidget):
         self.font_path_edit.setPlaceholderText("选择中文字体文件 (.ttf)，留空则跳过...")
         self.font_path_edit.textChanged.connect(self._update_font_status)
         font_browse = QPushButton("浏览...")
+        mark_quiet(font_browse)
         font_browse.clicked.connect(self.browse_font)
         font_row = QHBoxLayout()
         font_row.addWidget(self.font_path_edit)
@@ -611,7 +624,7 @@ class TrainingPanel(QWidget):
         smart_group = QGroupBox("智能推荐")
         smart_layout = QVBoxLayout()
         self.recommend_btn = QPushButton("分析数据集并推荐参数")
-        self.recommend_btn.setObjectName("PrimaryButton")
+        self.recommend_btn.setObjectName("SecondaryButton")
         self.recommend_btn.clicked.connect(self._auto_recommend_params)
         smart_layout.addWidget(self.recommend_btn)
         smart_group.setLayout(smart_layout)
@@ -622,22 +635,25 @@ class TrainingPanel(QWidget):
 
         template_btn_row = QHBoxLayout()
         self.template_combo = QComboBox()
-        self.template_combo.setMinimumWidth(160)
+        self.template_combo.setMinimumWidth(120)
         self._load_template_list()
         template_btn_row.addWidget(self.template_combo, 1)
 
         self.save_template_btn = QPushButton("保存")
-        self.save_template_btn.setFixedWidth(52)
+        self.save_template_btn.setFixedWidth(48)
+        mark_quiet(self.save_template_btn)
         self.save_template_btn.clicked.connect(self._save_template)
         template_btn_row.addWidget(self.save_template_btn)
 
         self.load_template_btn = QPushButton("加载")
-        self.load_template_btn.setFixedWidth(52)
+        self.load_template_btn.setFixedWidth(48)
+        mark_quiet(self.load_template_btn)
         self.load_template_btn.clicked.connect(self._load_template)
         template_btn_row.addWidget(self.load_template_btn)
 
         self.delete_template_btn = QPushButton("删除")
-        self.delete_template_btn.setFixedWidth(52)
+        self.delete_template_btn.setFixedWidth(48)
+        mark_quiet(self.delete_template_btn)
         self.delete_template_btn.clicked.connect(self._delete_template)
         template_btn_row.addWidget(self.delete_template_btn)
 
@@ -835,6 +851,67 @@ class TrainingPanel(QWidget):
 
         aug_group.setLayout(aug_layout)
 
+        flat_section_style = f"""
+            QGroupBox {{
+                background: transparent;
+                border: none;
+                border-top: 1px solid {Theme.BORDER};
+                border-radius: 0;
+                margin-top: 14px;
+                padding: 9px 0 0 0;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 0;
+                padding: 0 8px 0 0;
+                color: {Theme.TEXT_MUTED};
+            }}
+        """
+        for section in (
+            model_group,
+            data_group,
+            device_group,
+            save_group,
+            font_group,
+            smart_group,
+            template_group,
+            params_group,
+            optim_group,
+            aug_group,
+        ):
+            section.setFlat(True)
+            section.setStyleSheet(flat_section_style)
+
+        for section_layout in (
+            model_layout,
+            data_layout,
+            device_layout,
+            save_layout,
+            font_layout,
+            smart_layout,
+            template_layout,
+            params_layout,
+            optim_layout,
+            aug_layout,
+        ):
+            section_layout.setContentsMargins(0, 7, 0, 0)
+            section_layout.setSpacing(6)
+
+        for form_layout in (
+            model_layout,
+            data_layout,
+            device_layout,
+            save_layout,
+            font_layout,
+            params_layout,
+            optim_layout,
+            aug_layout,
+        ):
+            form_layout.setHorizontalSpacing(8)
+            form_layout.setVerticalSpacing(6)
+            form_layout.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+
         setup_tab, setup_layout = create_tab()
         setup_layout.addWidget(model_group)
         setup_layout.addWidget(data_group)
@@ -866,13 +943,15 @@ class TrainingPanel(QWidget):
         # Right: chart + log
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
-        right_layout.setContentsMargins(10, 0, 0, 0)
-        right_layout.setSpacing(10)
+        right_layout.setContentsMargins(8, 2, 2, 2)
+        right_layout.setSpacing(6)
 
-        monitor_group = QGroupBox("训练监控")
-        monitor_layout = QVBoxLayout()
+        monitor_title = QLabel("训练监控")
+        monitor_title.setObjectName("SectionTitle")
+        right_layout.addWidget(monitor_title)
 
         self.chart_tabs = QTabWidget()
+        self.chart_tabs.setDocumentMode(True)
 
         self.training_chart = TrainingChart()
         self.chart_tabs.addTab(self.training_chart, "训练曲线")
@@ -882,13 +961,14 @@ class TrainingPanel(QWidget):
         self.log_text.setFont(QFont("monospace", 9))
         self.chart_tabs.addTab(self.log_text, "训练日志")
 
-        monitor_layout.addWidget(self.chart_tabs)
-        monitor_group.setLayout(monitor_layout)
-        right_layout.addWidget(monitor_group, 1)
+        right_layout.addWidget(self.chart_tabs, 1)
 
-        control_group = QGroupBox("运行控制")
-        control_layout = QVBoxLayout()
+        control_title = QLabel("运行控制")
+        control_title.setObjectName("SectionTitle")
+        right_layout.addWidget(control_title)
+
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(6)
 
         self.start_btn = QPushButton("开始训练")
         self.start_btn.setObjectName("PrimaryButton")
@@ -900,28 +980,29 @@ class TrainingPanel(QWidget):
         self.stop_btn.clicked.connect(self.stop_training)
 
         self.refresh_chart_btn = QPushButton("刷新曲线")
+        mark_quiet(self.refresh_chart_btn)
         self.refresh_chart_btn.clicked.connect(self.refresh_chart)
 
         btn_layout.addWidget(self.start_btn)
         btn_layout.addWidget(self.stop_btn)
         btn_layout.addWidget(self.refresh_chart_btn)
-        control_layout.addLayout(btn_layout)
+        btn_layout.addStretch()
+        right_layout.addLayout(btn_layout)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
-        control_layout.addWidget(self.progress_bar)
+        right_layout.addWidget(self.progress_bar)
 
         self.early_stop_label = QLabel("")
         self.early_stop_label.setStyleSheet(f"color: {Theme.TEXT_MUTED}; font-size: 12px; padding: 4px 0;")
         self.early_stop_label.setVisible(False)
-        control_layout.addWidget(self.early_stop_label)
-
-        control_group.setLayout(control_layout)
-        right_layout.addWidget(control_group)
+        right_layout.addWidget(self.early_stop_label)
 
         main_splitter.addWidget(right_widget)
-        main_splitter.setSizes([420, 680])
+        main_splitter.setStretchFactor(0, 0)
+        main_splitter.setStretchFactor(1, 1)
+        main_splitter.setSizes([370, 730])
 
         layout.addWidget(main_splitter)
 

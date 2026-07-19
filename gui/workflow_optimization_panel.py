@@ -3,12 +3,11 @@
 from pathlib import Path
 
 from loguru import logger
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -91,7 +90,8 @@ class WorkflowOptimizationPanel(QWidget):
     def init_ui(self):
         """Initialize UI."""
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         # Create tabs
         tabs = QTabWidget()
@@ -114,16 +114,38 @@ class WorkflowOptimizationPanel(QWidget):
 
         layout.addWidget(tabs)
 
+    @staticmethod
+    def _create_tab_layout(widget: QWidget) -> QVBoxLayout:
+        """Create the shared, compact layout used by each tab."""
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+        return layout
+
+    @staticmethod
+    def _add_section_header(layout: QVBoxLayout, title: str, description: str):
+        title_label = QLabel(title)
+        title_label.setObjectName("SectionTitle")
+        layout.addWidget(title_label)
+
+        description_label = QLabel(description)
+        description_label.setObjectName("MutedText")
+        description_label.setWordWrap(True)
+        layout.addWidget(description_label)
+
     def create_batch_tab(self) -> QWidget:
         """Create batch processing tab."""
         widget = QWidget()
-        layout = QVBoxLayout(widget)
+        layout = self._create_tab_layout(widget)
 
-        # Batch export
-        export_group = QGroupBox("批量导出")
-        export_layout = QVBoxLayout()
+        self._add_section_header(
+            layout,
+            "批量导出",
+            "在常用标注格式之间转换整个目录。",
+        )
 
         export_btn_layout = QHBoxLayout()
+        export_btn_layout.setSpacing(8)
         self.export_input_btn = QPushButton("选择输入目录")
         self.export_input_btn.clicked.connect(self.select_export_input)
         export_btn_layout.addWidget(self.export_input_btn)
@@ -131,33 +153,40 @@ class WorkflowOptimizationPanel(QWidget):
         self.export_output_btn = QPushButton("选择输出目录")
         self.export_output_btn.clicked.connect(self.select_export_output)
         export_btn_layout.addWidget(self.export_output_btn)
-
-        export_layout.addLayout(export_btn_layout)
+        export_btn_layout.addStretch(1)
+        layout.addLayout(export_btn_layout)
 
         format_layout = QHBoxLayout()
-        format_layout.addWidget(QLabel("输入格式:"))
+        format_layout.setSpacing(8)
+        format_layout.addWidget(QLabel("输入格式"))
         self.export_input_format_combo = QComboBox()
         self.export_input_format_combo.addItems(["YOLO", "VOC", "COCO", "DOTA"])
+        self.export_input_format_combo.setMinimumWidth(96)
         format_layout.addWidget(self.export_input_format_combo)
 
-        format_layout.addWidget(QLabel("输出格式:"))
+        format_layout.addSpacing(8)
+        format_layout.addWidget(QLabel("输出格式"))
         self.export_format_combo = QComboBox()
         self.export_format_combo.addItems(["YOLO", "VOC", "COCO", "DOTA"])
+        self.export_format_combo.setMinimumWidth(96)
         format_layout.addWidget(self.export_format_combo)
-        export_layout.addLayout(format_layout)
+        format_layout.addStretch(1)
 
         self.export_btn = QPushButton("开始导出")
+        self.export_btn.setObjectName("PrimaryButton")
         self.export_btn.clicked.connect(self.start_batch_export)
-        export_layout.addWidget(self.export_btn)
+        format_layout.addWidget(self.export_btn)
+        layout.addLayout(format_layout)
 
-        export_group.setLayout(export_layout)
-        layout.addWidget(export_group)
-
-        # Batch auto-label
-        label_group = QGroupBox("批量自动标注")
-        label_layout = QVBoxLayout()
+        layout.addSpacing(8)
+        self._add_section_header(
+            layout,
+            "批量自动标注",
+            "使用所选模型为图片目录生成 YOLO 标注文件。",
+        )
 
         label_btn_layout = QHBoxLayout()
+        label_btn_layout.setSpacing(8)
         self.label_input_btn = QPushButton("选择图片目录")
         self.label_input_btn.clicked.connect(self.select_label_input)
         label_btn_layout.addWidget(self.label_input_btn)
@@ -165,149 +194,166 @@ class WorkflowOptimizationPanel(QWidget):
         self.label_output_btn = QPushButton("选择输出目录")
         self.label_output_btn.clicked.connect(self.select_label_output)
         label_btn_layout.addWidget(self.label_output_btn)
+        label_btn_layout.addStretch(1)
+        layout.addLayout(label_btn_layout)
 
-        label_layout.addLayout(label_btn_layout)
-
-        # Model and threshold controls
         model_row = QHBoxLayout()
-        model_row.addWidget(QLabel("模型:"))
+        model_row.setSpacing(8)
+        model_row.addWidget(QLabel("模型"))
         self.label_model_combo = QComboBox()
         self.label_model_combo.setEditable(True)
         self.label_model_combo.setMinimumWidth(150)
         self._populate_label_models()
         model_row.addWidget(self.label_model_combo, 1)
-        model_row.addWidget(QLabel("Conf:"))
+        model_row.addWidget(QLabel("置信度"))
         self.label_conf_spin = QDoubleSpinBox()
         self.label_conf_spin.setRange(0.01, 1.0)
         self.label_conf_spin.setValue(0.25)
         self.label_conf_spin.setSingleStep(0.05)
         model_row.addWidget(self.label_conf_spin)
-        model_row.addWidget(QLabel("IoU:"))
+        model_row.addWidget(QLabel("IoU"))
         self.label_iou_spin = QDoubleSpinBox()
         self.label_iou_spin.setRange(0.1, 1.0)
         self.label_iou_spin.setValue(0.7)
         self.label_iou_spin.setSingleStep(0.05)
         model_row.addWidget(self.label_iou_spin)
-        label_layout.addLayout(model_row)
+        model_row.addSpacing(8)
 
         self.label_btn = QPushButton("开始标注")
+        self.label_btn.setObjectName("PrimaryButton")
         self.label_btn.clicked.connect(self.start_batch_label)
-        label_layout.addWidget(self.label_btn)
+        model_row.addWidget(self.label_btn)
+        layout.addLayout(model_row)
 
-        label_group.setLayout(label_layout)
-        layout.addWidget(label_group)
-
-        # Progress
-        progress_group = QGroupBox("进度")
-        progress_layout = QVBoxLayout()
-
-        self.batch_progress_bar = QProgressBar()
-        progress_layout.addWidget(self.batch_progress_bar)
+        layout.addSpacing(8)
+        progress_header = QHBoxLayout()
+        progress_title = QLabel("任务进度")
+        progress_title.setObjectName("SectionTitle")
+        progress_header.addWidget(progress_title)
+        progress_header.addStretch(1)
 
         self.batch_status_label = QLabel("就绪")
-        progress_layout.addWidget(self.batch_status_label)
+        self.batch_status_label.setObjectName("MutedText")
+        progress_header.addWidget(self.batch_status_label)
+        layout.addLayout(progress_header)
 
-        progress_group.setLayout(progress_layout)
-        layout.addWidget(progress_group)
+        self.batch_progress_bar = QProgressBar()
+        layout.addWidget(self.batch_progress_bar)
 
-        layout.addStretch()
+        layout.addStretch(1)
         return widget
 
     def create_validation_tab(self) -> QWidget:
         """Create validation tab."""
         widget = QWidget()
-        layout = QVBoxLayout(widget)
+        layout = self._create_tab_layout(widget)
 
-        # Validation options
-        options_group = QGroupBox("验证选项")
-        options_layout = QVBoxLayout()
+        self._add_section_header(
+            layout,
+            "标注验证",
+            "检查图片缺少标注、无效标注和常见格式问题。",
+        )
 
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(8)
         self.validate_input_btn = QPushButton("选择目录")
         self.validate_input_btn.clicked.connect(self.select_validate_input)
         btn_layout.addWidget(self.validate_input_btn)
+        btn_layout.addStretch(1)
 
         self.validate_btn = QPushButton("开始验证")
+        self.validate_btn.setObjectName("PrimaryButton")
         self.validate_btn.clicked.connect(self.start_validation)
         btn_layout.addWidget(self.validate_btn)
+        layout.addLayout(btn_layout)
 
-        options_layout.addLayout(btn_layout)
-        options_group.setLayout(options_layout)
-        layout.addWidget(options_group)
-
-        # Results
-        results_group = QGroupBox("验证结果")
-        results_layout = QVBoxLayout()
+        layout.addSpacing(8)
+        self._add_section_header(
+            layout,
+            "验证结果",
+            "问题文件和统计摘要会显示在这里。",
+        )
 
         self.validation_results = QTextEdit()
         self.validation_results.setReadOnly(True)
-        results_layout.addWidget(self.validation_results)
-
-        results_group.setLayout(results_layout)
-        layout.addWidget(results_group)
+        self.validation_results.setPlaceholderText("选择数据目录并开始验证")
+        layout.addWidget(self.validation_results, 1)
 
         return widget
 
     def create_quality_tab(self) -> QWidget:
         """Create quality check tab."""
         widget = QWidget()
-        layout = QVBoxLayout(widget)
+        layout = self._create_tab_layout(widget)
 
-        # Quality check options
-        options_group = QGroupBox("质量检查选项")
-        options_layout = QVBoxLayout()
+        self._add_section_header(
+            layout,
+            "数据质量检查",
+            "汇总覆盖率、类别分布和标注尺寸等质量指标。",
+        )
 
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(8)
         self.quality_input_btn = QPushButton("选择目录")
         self.quality_input_btn.clicked.connect(self.select_quality_input)
         btn_layout.addWidget(self.quality_input_btn)
+        btn_layout.addStretch(1)
 
         self.quality_check_btn = QPushButton("开始检查")
+        self.quality_check_btn.setObjectName("PrimaryButton")
         self.quality_check_btn.clicked.connect(self.start_quality_check)
         btn_layout.addWidget(self.quality_check_btn)
+        layout.addLayout(btn_layout)
 
-        options_layout.addLayout(btn_layout)
-        options_group.setLayout(options_layout)
-        layout.addWidget(options_group)
-
-        # Results
-        results_group = QGroupBox("检查结果")
-        results_layout = QVBoxLayout()
+        layout.addSpacing(8)
+        self._add_section_header(
+            layout,
+            "检查结果",
+            "完成检查后会显示数据规模、缺失标注和类别明细。",
+        )
 
         self.quality_results = QTextEdit()
         self.quality_results.setReadOnly(True)
-        results_layout.addWidget(self.quality_results)
-
-        results_group.setLayout(results_layout)
-        layout.addWidget(results_group)
+        self.quality_results.setPlaceholderText("选择数据目录并开始质量检查")
+        layout.addWidget(self.quality_results, 1)
 
         return widget
 
     def create_presets_tab(self) -> QWidget:
         """Create presets tab."""
         widget = QWidget()
-        layout = QVBoxLayout(widget)
+        layout = self._create_tab_layout(widget)
 
-        # Presets list
-        presets_group = QGroupBox("预设列表")
-        presets_layout = QVBoxLayout()
+        self._add_section_header(
+            layout,
+            "预设列表",
+            "保存当前类别配置，便于在后续项目中重复使用。",
+        )
+
+        self.presets_empty_label = QLabel("暂无预设\n新建预设后会显示在这里")
+        self.presets_empty_label.setObjectName("MutedText")
+        self.presets_empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.presets_empty_label.setWordWrap(True)
 
         self.presets_list = QListWidget()
+        layout.addWidget(self.presets_empty_label, 1)
+        layout.addWidget(self.presets_list, 1)
         self.refresh_presets_list()
-        presets_layout.addWidget(self.presets_list)
 
         btn_layout = QHBoxLayout()
-        self.new_preset_btn = QPushButton("新建预设")
-        self.new_preset_btn.clicked.connect(self.create_new_preset)
-        btn_layout.addWidget(self.new_preset_btn)
+        btn_layout.setSpacing(8)
 
         self.delete_preset_btn = QPushButton("删除预设")
+        self.delete_preset_btn.setObjectName("DangerButton")
         self.delete_preset_btn.clicked.connect(self.delete_preset)
         btn_layout.addWidget(self.delete_preset_btn)
+        btn_layout.addStretch(1)
 
-        presets_layout.addLayout(btn_layout)
-        presets_group.setLayout(presets_layout)
-        layout.addWidget(presets_group)
+        self.new_preset_btn = QPushButton("新建预设")
+        self.new_preset_btn.setObjectName("PrimaryButton")
+        self.new_preset_btn.clicked.connect(self.create_new_preset)
+        btn_layout.addWidget(self.new_preset_btn)
+        layout.addLayout(btn_layout)
 
         return widget
 
@@ -554,6 +600,8 @@ class WorkflowOptimizationPanel(QWidget):
         presets = self.preset_manager.list_presets()
         for preset in presets:
             self.presets_list.addItem(preset)
+        self.presets_empty_label.setVisible(not presets)
+        self.presets_list.setVisible(bool(presets))
 
     def create_new_preset(self):
         """Create new preset from current class configuration."""

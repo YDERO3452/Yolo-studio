@@ -7,7 +7,6 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
     QFileDialog,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -71,7 +70,8 @@ class AdvancedFeaturesPanel(QWidget):
     def init_ui(self):
         """Initialize UI."""
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         # Create tabs
         tabs = QTabWidget()
@@ -94,148 +94,162 @@ class AdvancedFeaturesPanel(QWidget):
 
         layout.addWidget(tabs)
 
+    @staticmethod
+    def _create_tab_layout(widget: QWidget) -> QVBoxLayout:
+        """Create the shared, compact layout used by each tab."""
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+        return layout
+
+    @staticmethod
+    def _add_section_header(layout: QVBoxLayout, title: str, description: str):
+        title_label = QLabel(title)
+        title_label.setObjectName("SectionTitle")
+        layout.addWidget(title_label)
+
+        description_label = QLabel(description)
+        description_label.setObjectName("MutedText")
+        description_label.setWordWrap(True)
+        layout.addWidget(description_label)
+
     def create_statistics_tab(self) -> QWidget:
         """Create statistics tab."""
         widget = QWidget()
-        layout = QVBoxLayout(widget)
+        layout = self._create_tab_layout(widget)
 
-        # Directory selection
-        dir_group = QGroupBox("目录选择")
-        dir_layout = QVBoxLayout()
+        self._add_section_header(
+            layout,
+            "数据范围",
+            "从同一目录读取图片和标注，统计类别分布、覆盖率与标注尺寸。",
+        )
 
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(8)
         self.stats_input_btn = QPushButton("选择目录")
         self.stats_input_btn.clicked.connect(self.select_statistics_dir)
         btn_layout.addWidget(self.stats_input_btn)
+        btn_layout.addStretch(1)
 
         self.collect_stats_btn = QPushButton("收集统计")
+        self.collect_stats_btn.setObjectName("PrimaryButton")
         self.collect_stats_btn.clicked.connect(self.collect_statistics)
         btn_layout.addWidget(self.collect_stats_btn)
+        layout.addLayout(btn_layout)
 
-        dir_layout.addLayout(btn_layout)
-        dir_group.setLayout(dir_layout)
-        layout.addWidget(dir_group)
-
-        # Progress
         self.stats_progress = QProgressBar()
         layout.addWidget(self.stats_progress)
 
-        # Results
-        results_group = QGroupBox("统计结果")
-        results_layout = QVBoxLayout()
+        layout.addSpacing(8)
+        self._add_section_header(
+            layout,
+            "统计结果",
+            "完成收集后，这里会显示数据集概览和各类别明细。",
+        )
 
         self.stats_results = QTextEdit()
         self.stats_results.setReadOnly(True)
-        results_layout.addWidget(self.stats_results)
+        self.stats_results.setPlaceholderText("选择数据目录并收集统计结果")
+        layout.addWidget(self.stats_results, 1)
 
-        results_group.setLayout(results_layout)
-        layout.addWidget(results_group)
-
-        layout.addStretch()
         return widget
 
     def create_reports_tab(self) -> QWidget:
         """Create reports tab."""
         widget = QWidget()
-        layout = QVBoxLayout(widget)
+        layout = self._create_tab_layout(widget)
 
-        # Report format
-        format_group = QGroupBox("报告格式")
-        format_layout = QVBoxLayout()
+        self._add_section_header(
+            layout,
+            "报告设置",
+            "基于统计结果生成可保存的 HTML、JSON 或文本报告。",
+        )
 
         format_btn_layout = QHBoxLayout()
-        format_btn_layout.addWidget(QLabel("格式:"))
+        format_btn_layout.setSpacing(8)
+        format_btn_layout.addWidget(QLabel("报告格式"))
         self.report_format_combo = QComboBox()
         self.report_format_combo.addItems(["HTML", "JSON", "Text"])
+        self.report_format_combo.setMinimumWidth(120)
         format_btn_layout.addWidget(self.report_format_combo)
-        format_layout.addLayout(format_btn_layout)
-
-        format_group.setLayout(format_layout)
-        layout.addWidget(format_group)
-
-        # Generate report
-        report_group = QGroupBox("生成报告")
-        report_layout = QVBoxLayout()
+        format_btn_layout.addStretch(1)
 
         self.generate_report_btn = QPushButton("生成报告")
+        self.generate_report_btn.setObjectName("PrimaryButton")
         self.generate_report_btn.clicked.connect(self.generate_report)
-        report_layout.addWidget(self.generate_report_btn)
+        format_btn_layout.addWidget(self.generate_report_btn)
+        layout.addLayout(format_btn_layout)
 
-        report_group.setLayout(report_layout)
-        layout.addWidget(report_group)
-
-        # Report preview
-        preview_group = QGroupBox("报告预览")
-        preview_layout = QVBoxLayout()
+        layout.addSpacing(8)
+        self._add_section_header(
+            layout,
+            "报告预览",
+            "报告生成后会保存到所选位置。",
+        )
 
         self.report_preview = QTextEdit()
         self.report_preview.setReadOnly(True)
-        preview_layout.addWidget(self.report_preview)
+        self.report_preview.setPlaceholderText(
+            "请先在“统计分析”中收集统计结果，再生成报告"
+        )
+        layout.addWidget(self.report_preview, 1)
 
-        preview_group.setLayout(preview_layout)
-        layout.addWidget(preview_group)
-
-        layout.addStretch()
         return widget
 
     def create_augmentation_tab(self) -> QWidget:
         """Create augmentation tab."""
         widget = QWidget()
-        layout = QVBoxLayout(widget)
+        layout = self._create_tab_layout(widget)
 
-        # Augmentation suggestions
-        suggestions_group = QGroupBox("增强建议")
-        suggestions_layout = QVBoxLayout()
+        self._add_section_header(
+            layout,
+            "增强建议",
+            "根据已收集的数据分布给出增强策略和推荐配置。",
+        )
+
+        action_layout = QHBoxLayout()
+        action_layout.addStretch(1)
+        self.show_config_btn = QPushButton("显示配置")
+        self.show_config_btn.setObjectName("PrimaryButton")
+        self.show_config_btn.clicked.connect(self.show_augmentation_config)
+        action_layout.addWidget(self.show_config_btn)
+        layout.addLayout(action_layout)
 
         self.augmentation_suggestions = QTextEdit()
         self.augmentation_suggestions.setReadOnly(True)
-        suggestions_layout.addWidget(self.augmentation_suggestions)
+        self.augmentation_suggestions.setPlaceholderText(
+            "请先在“统计分析”中收集数据，再查看增强建议"
+        )
+        layout.addWidget(self.augmentation_suggestions, 1)
 
-        suggestions_group.setLayout(suggestions_layout)
-        layout.addWidget(suggestions_group)
-
-        # Augmentation config
-        config_group = QGroupBox("增强配置")
-        config_layout = QVBoxLayout()
-
-        self.show_config_btn = QPushButton("显示配置")
-        self.show_config_btn.clicked.connect(self.show_augmentation_config)
-        config_layout.addWidget(self.show_config_btn)
-
-        config_group.setLayout(config_layout)
-        layout.addWidget(config_group)
-
-        layout.addStretch()
         return widget
 
     def create_finetuning_tab(self) -> QWidget:
         """Create fine-tuning tab."""
         widget = QWidget()
-        layout = QVBoxLayout(widget)
+        layout = self._create_tab_layout(widget)
 
-        # Training config
-        config_group = QGroupBox("训练配置")
-        config_layout = QVBoxLayout()
+        self._add_section_header(
+            layout,
+            "训练配置",
+            "根据数据规模和类别分布生成训练参数与实践建议。",
+        )
 
+        action_layout = QHBoxLayout()
+        action_layout.addStretch(1)
         self.show_training_config_btn = QPushButton("显示推荐配置")
+        self.show_training_config_btn.setObjectName("PrimaryButton")
         self.show_training_config_btn.clicked.connect(self.show_training_config)
-        config_layout.addWidget(self.show_training_config_btn)
-
-        config_group.setLayout(config_layout)
-        layout.addWidget(config_group)
-
-        # Training tips
-        tips_group = QGroupBox("训练建议")
-        tips_layout = QVBoxLayout()
+        action_layout.addWidget(self.show_training_config_btn)
+        layout.addLayout(action_layout)
 
         self.training_tips = QTextEdit()
         self.training_tips.setReadOnly(True)
-        tips_layout.addWidget(self.training_tips)
+        self.training_tips.setPlaceholderText(
+            "请先在“统计分析”中收集数据，再查看推荐训练配置"
+        )
+        layout.addWidget(self.training_tips, 1)
 
-        tips_group.setLayout(tips_layout)
-        layout.addWidget(tips_group)
-
-        layout.addStretch()
         return widget
 
     def select_statistics_dir(self):

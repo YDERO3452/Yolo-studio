@@ -2,19 +2,19 @@
 
 import os
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFileDialog,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QSplitter,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -54,48 +54,59 @@ class ExportPanel(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
 
-        # Model selection
-        model_group = QGroupBox("模型")
-        model_layout = QVBoxLayout()
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(6)
 
-        # Row 1: path + browse + load
+        settings_widget = QWidget()
+        settings_widget.setMinimumWidth(380)
+        settings_layout = QVBoxLayout(settings_widget)
+        settings_layout.setContentsMargins(0, 0, 8, 0)
+        settings_layout.setSpacing(8)
+
+        settings_title = QLabel("导出设置")
+        settings_title.setObjectName("PanelTitle")
+        settings_layout.addWidget(settings_title)
+
+        model_label = QLabel("模型")
+        model_label.setObjectName("MutedText")
+        settings_layout.addWidget(model_label)
+
         path_row = QHBoxLayout()
         self.model_path_edit = QLineEdit()
         self.model_path_edit.setPlaceholderText("选择要导出的模型 (.pt)")
         browse_btn = QPushButton("浏览...")
+        browse_btn.setObjectName("QuietButton")
         browse_btn.clicked.connect(self.browse_model)
         self.load_btn = QPushButton("加载")
+        self.load_btn.setObjectName("SecondaryButton")
         self.load_btn.clicked.connect(self.load_model)
 
-        path_row.addWidget(self.model_path_edit)
+        path_row.addWidget(self.model_path_edit, stretch=1)
         path_row.addWidget(browse_btn)
         path_row.addWidget(self.load_btn)
-        model_layout.addLayout(path_row)
+        settings_layout.addLayout(path_row)
 
-        # Row 2: recent trained models
         recent_row = QHBoxLayout()
         recent_row.addWidget(QLabel("最近训练:"))
         self.recent_model_combo = QComboBox()
         self.recent_model_combo.setPlaceholderText("选择最近训练的模型...")
-        self.recent_model_combo.setMinimumWidth(300)
+        self.recent_model_combo.setMinimumWidth(240)
         self._refresh_recent_models()
         self.recent_model_combo.currentTextChanged.connect(self._on_recent_model_selected)
-        recent_row.addWidget(self.recent_model_combo)
+        recent_row.addWidget(self.recent_model_combo, stretch=1)
 
         refresh_btn = QPushButton("刷新")
-        refresh_btn.setFixedWidth(60)
+        refresh_btn.setObjectName("QuietButton")
         refresh_btn.clicked.connect(self._refresh_recent_models)
         recent_row.addWidget(refresh_btn)
-        model_layout.addLayout(recent_row)
+        settings_layout.addLayout(recent_row)
 
-        model_group.setLayout(model_layout)
-        layout.addWidget(model_group)
-
-        # Export format
-        format_group = QGroupBox("导出格式")
-        format_layout = QVBoxLayout()
+        format_label = QLabel("格式与参数")
+        format_label.setObjectName("MutedText")
+        settings_layout.addWidget(format_label)
 
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("导出格式:"))
@@ -103,10 +114,9 @@ class ExportPanel(QWidget):
         formats = ModelExporter.get_supported_formats()
         for key, info in formats.items():
             self.format_combo.addItem(f"{info['description']} ({key})", key)
-        row1.addWidget(self.format_combo)
-        format_layout.addLayout(row1)
+        row1.addWidget(self.format_combo, stretch=1)
+        settings_layout.addLayout(row1)
 
-        # Export options
         row2 = QHBoxLayout()
         self.half_check = QCheckBox("FP16 半精度")
         self.half_check.setToolTip("FP16 需要 NVIDIA GPU，CPU 模式不可用")
@@ -116,7 +126,8 @@ class ExportPanel(QWidget):
         row2.addWidget(self.half_check)
         row2.addWidget(self.dynamic_check)
         row2.addWidget(self.simplify_check)
-        format_layout.addLayout(row2)
+        row2.addStretch()
+        settings_layout.addLayout(row2)
 
         # Auto-disable FP16 if CUDA is not available
         self._check_cuda_for_half()
@@ -129,38 +140,58 @@ class ExportPanel(QWidget):
         self.imgsz_spin.setValue(640)
         row3.addWidget(self.imgsz_spin)
 
+        row3.addSpacing(8)
         row3.addWidget(QLabel("ONNX Opset:"))
         self.opset_spin = QSpinBox()
         self.opset_spin.setRange(0, 23)
         self.opset_spin.setSpecialValueText("自动")
         self.opset_spin.setValue(17)
         row3.addWidget(self.opset_spin)
-        format_layout.addLayout(row3)
+        row3.addStretch()
+        settings_layout.addLayout(row3)
 
-        format_group.setLayout(format_layout)
-        layout.addWidget(format_group)
-
-        # Export button
         self.export_btn = QPushButton("导出模型")
         self.export_btn.setObjectName("PrimaryButton")
         self.export_btn.clicked.connect(self.export_model)
-        layout.addWidget(self.export_btn)
+        settings_layout.addWidget(self.export_btn)
+        settings_layout.addStretch()
+        splitter.addWidget(settings_widget)
 
-        # Status
+        activity_widget = QWidget()
+        activity_layout = QVBoxLayout(activity_widget)
+        activity_layout.setContentsMargins(8, 0, 0, 0)
+        activity_layout.setSpacing(8)
+
+        activity_title = QLabel("导出活动")
+        activity_title.setObjectName("PanelTitle")
+        activity_layout.addWidget(activity_title)
+
         self.status_text = QTextEdit()
         self.status_text.setReadOnly(True)
         self.status_text.setFont(QFont("monospace", 9))
-        layout.addWidget(self.status_text)
+        self.status_text.setPlaceholderText(
+            "尚无导出记录\n加载模型并开始导出后，进度、错误与输出路径会显示在这里。"
+        )
+        activity_layout.addWidget(self.status_text, stretch=1)
 
-        # Format info
-        info_group = QGroupBox("格式说明")
-        info_layout = QVBoxLayout()
+        info_title = QLabel("格式说明")
+        info_title.setObjectName("MutedText")
+        activity_layout.addWidget(info_title)
+
         self.format_info_label = QLabel()
+        self.format_info_label.setObjectName("MutedText")
         self.format_info_label.setWordWrap(True)
+        self.format_info_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+        )
         self.format_info_label.setText(self._get_format_info("onnx"))
-        info_layout.addWidget(self.format_info_label)
-        info_group.setLayout(info_layout)
-        layout.addWidget(info_group)
+        activity_layout.addWidget(self.format_info_label)
+        splitter.addWidget(activity_widget)
+
+        splitter.setSizes([460, 700])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        layout.addWidget(splitter, stretch=1)
 
         self.format_combo.currentIndexChanged.connect(
             lambda: self.format_info_label.setText(

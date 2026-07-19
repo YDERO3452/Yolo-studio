@@ -40,6 +40,7 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSpinBox,
+    QSplitter,
     QStackedWidget,
     QTabWidget,
     QTextEdit,
@@ -210,19 +211,10 @@ class MainWindow(QMainWindow):
     def _create_nav_rail(self) -> QWidget:
         rail = QWidget()
         rail.setObjectName("NavRail")
+        rail.setFixedWidth(48)
         layout = QVBoxLayout(rail)
-        layout.setContentsMargins(6, 8, 6, 8)
+        layout.setContentsMargins(7, 8, 7, 8)
         layout.setSpacing(4)
-
-        # Wrap sidebar in scroll area so bottom tools aren't clipped on short windows
-        scroll = QScrollArea()
-        scroll.setObjectName("NavRailScroll")
-        scroll.setFixedWidth(54)  # 48 content + 6 for scrollbar
-        scroll.setWidget(rail)
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll.setStyleSheet(f"QScrollArea#NavRailScroll {{ background: {Theme.BG}; border: none; }}")
 
         self.workspace_tab_group = QButtonGroup(self)
         self.workspace_tab_group.setExclusive(True)
@@ -240,9 +232,9 @@ class MainWindow(QMainWindow):
             btn.setObjectName("NavButton")
             btn.setCheckable(True)
             btn.setToolTip(tip)
-            btn.setFixedSize(34, 34)
+            btn.setFixedSize(32, 32)
             btn.setIcon(self._tool_icon(icon_name))
-            btn.setIconSize(QSize(22, 22))
+            btn.setIconSize(QSize(20, 20))
             btn.clicked.connect(lambda checked=False, i=index: self._switch_workspace(i))
             self.workspace_tab_group.addButton(btn, index)
             self.workspace_tab_buttons[index] = btn
@@ -261,7 +253,7 @@ class MainWindow(QMainWindow):
         self.annotation_tools_container = QWidget()
         tools_layout = QVBoxLayout(self.annotation_tools_container)
         tools_layout.setContentsMargins(0, 0, 0, 0)
-        tools_layout.setSpacing(7)
+        tools_layout.setSpacing(4)
 
         self.mode_actions: dict[CanvasMode, QPushButton] = {}
         self.mode_group = QButtonGroup(self)
@@ -277,37 +269,38 @@ class MainWindow(QMainWindow):
             btn.setObjectName("ToolButton")
             btn.setCheckable(True)
             btn.setToolTip(tip)
-            btn.setFixedSize(34, 34)
+            btn.setFixedSize(32, 32)
             btn.setIcon(self._tool_icon(icon_name))
-            btn.setIconSize(QSize(22, 22))
+            btn.setIconSize(QSize(20, 20))
             btn.clicked.connect(lambda checked=False, m=mode: self._set_canvas_mode(m))
             self.mode_group.addButton(btn)
             self.mode_actions[mode] = btn
             tools_layout.addWidget(btn)
 
-        tools_layout.addSpacing(10)
+        tools_layout.addSpacing(6)
         fit_btn = QPushButton()
         fit_btn.setObjectName("ToolButton")
         fit_btn.setToolTip("适配图片到视口 (F)")
-        fit_btn.setFixedSize(34, 34)
+        fit_btn.setFixedSize(32, 32)
         fit_btn.setIcon(self._tool_icon("fit"))
-        fit_btn.setIconSize(QSize(22, 22))
+        fit_btn.setIconSize(QSize(20, 20))
         fit_btn.clicked.connect(self.canvas.fit_to_window)
         tools_layout.addWidget(fit_btn)
 
-        tools_layout.addSpacing(10)
-        class_label = QLabel("类别")
-        class_label.setObjectName("MutedText")
-        tools_layout.addWidget(class_label)
-        self.class_quick_layout = QVBoxLayout()
+        # Class management already lives in the inspector. Keep the layout for
+        # existing refresh logic without crowding the icon rail with text chips.
+        self.class_quick_container = QWidget()
+        self.class_quick_container.setVisible(False)
+        self.class_quick_layout = QVBoxLayout(self.class_quick_container)
+        self.class_quick_layout.setContentsMargins(0, 0, 0, 0)
         self.class_quick_layout.setSpacing(2)
-        tools_layout.addLayout(self.class_quick_layout)
+        tools_layout.addWidget(self.class_quick_container)
 
         layout.addWidget(self.annotation_tools_container)
         self.mode_actions[CanvasMode.CREATE_BBOX].setChecked(True)
 
         layout.addStretch()
-        return scroll
+        return rail
 
     def _create_annotation_workspace(self) -> QWidget:
         page = QWidget()
@@ -333,14 +326,16 @@ class MainWindow(QMainWindow):
         self.scroll_area.viewport().installEventFilter(self)
         center_layout.addWidget(self.scroll_area, stretch=1)
 
-        layout.addWidget(center, stretch=1)
-
-        canvas_separator = QWidget()
-        canvas_separator.setObjectName("CanvasInspectorSeparator")
-        canvas_separator.setFixedWidth(8)
-        layout.addWidget(canvas_separator)
-
-        layout.addWidget(self._create_inspector_v2())
+        center.setMinimumWidth(640)
+        self.annotation_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.annotation_splitter.setChildrenCollapsible(False)
+        self.annotation_splitter.setHandleWidth(1)
+        self.annotation_splitter.addWidget(center)
+        self.annotation_splitter.addWidget(self._create_inspector_v2())
+        self.annotation_splitter.setStretchFactor(0, 1)
+        self.annotation_splitter.setStretchFactor(1, 0)
+        self.annotation_splitter.setSizes([1040, 280])
+        layout.addWidget(self.annotation_splitter)
         return page
 
     @staticmethod
@@ -366,22 +361,22 @@ class MainWindow(QMainWindow):
     def _create_annotation_control_bar_v2(self) -> QWidget:
         header = QWidget()
         header.setObjectName("AnnotationControlBar")
-        header.setMinimumHeight(96)
+        header.setMinimumHeight(78)
         header.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         layout = QVBoxLayout(header)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(6)
+        layout.setContentsMargins(12, 7, 12, 7)
+        layout.setSpacing(5)
 
         model_row = QHBoxLayout()
         model_row.setContentsMargins(0, 0, 0, 0)
-        model_row.setSpacing(7)
+        model_row.setSpacing(6)
         layout.addLayout(model_row)
 
         model_row.addWidget(QLabel("模型"))
         self.yolo_model_combo = QComboBox()
         self.yolo_model_combo.setEditable(True)
         self.yolo_model_combo.setMinimumWidth(180)
-        self.yolo_model_combo.setMaximumWidth(520)
+        self.yolo_model_combo.setMaximumWidth(440)
         self.yolo_model_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._populate_yolo_models()
         model_row.addWidget(self.yolo_model_combo, stretch=1)
@@ -416,10 +411,10 @@ class MainWindow(QMainWindow):
 
         action_row = QHBoxLayout()
         action_row.setContentsMargins(0, 0, 0, 0)
-        action_row.setSpacing(7)
+        action_row.setSpacing(6)
         layout.addLayout(action_row)
 
-        action_row.addWidget(QLabel("置信"))
+        action_row.addWidget(QLabel("置信度"))
         self.yolo_conf_spin = QDoubleSpinBox()
         self.yolo_conf_spin.setRange(0.01, 1.0)
         self.yolo_conf_spin.setSingleStep(0.05)
@@ -495,16 +490,17 @@ class MainWindow(QMainWindow):
     def _create_inspector_v2(self) -> QWidget:
         inspector = QWidget()
         inspector.setObjectName("Inspector")
-        inspector.setFixedWidth(256)
+        inspector.setMinimumWidth(252)
+        inspector.setMaximumWidth(380)
         inspector.setAutoFillBackground(True)
-        inspector.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        inspector.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         layout = QVBoxLayout(inspector)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(4)
+        layout.setContentsMargins(10, 10, 10, 8)
+        layout.setSpacing(8)
 
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
-        header_row.setSpacing(4)
+        header_row.setSpacing(8)
         title = QLabel("标注面板")
         title.setObjectName("PanelTitle")
         header_row.addWidget(title)
@@ -546,11 +542,11 @@ class MainWindow(QMainWindow):
             self.class_panel.class_list_widget.setMinimumHeight(150)
             self.class_panel.class_list_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         if hasattr(self.class_panel, "add_btn"):
-            self.class_panel.add_btn.setFixedHeight(24)
+            self.class_panel.add_btn.setFixedHeight(28)
         if hasattr(self.class_panel, "remove_btn"):
-            self.class_panel.remove_btn.setFixedHeight(24)
+            self.class_panel.remove_btn.setFixedHeight(28)
         if hasattr(self.class_panel, "color_btn"):
-            self.class_panel.color_btn.setFixedHeight(24)
+            self.class_panel.color_btn.setFixedHeight(28)
         labels_layout.addWidget(self.class_panel, 1)
         tabs.addTab(labels_tab, "标签")
 
@@ -565,13 +561,13 @@ class MainWindow(QMainWindow):
         object_actions = QHBoxLayout()
         object_actions.setSpacing(4)
         del_btn = QPushButton("删除")
-        del_btn.setFixedHeight(24)
+        del_btn.setFixedHeight(28)
         del_btn.clicked.connect(self._delete_selected_shape)
         edit_btn = QPushButton("编辑")
-        edit_btn.setFixedHeight(24)
+        edit_btn.setFixedHeight(28)
         edit_btn.clicked.connect(self._delete_or_edit_selected_label)
         clr_btn = QPushButton("清空")
-        clr_btn.setFixedHeight(24)
+        clr_btn.setFixedHeight(28)
         clr_btn.clicked.connect(self._clear_shapes)
         object_actions.addWidget(del_btn)
         object_actions.addWidget(edit_btn)
@@ -585,7 +581,7 @@ class MainWindow(QMainWindow):
         queue_layout.setSpacing(6)
         self.file_search = QLineEdit()
         self.file_search.setPlaceholderText("搜索...")
-        self.file_search.setFixedHeight(24)
+        self.file_search.setFixedHeight(28)
         self.file_search.setClearButtonEnabled(True)
         self.file_search.textChanged.connect(self._filter_file_list)
         queue_layout.addWidget(self.file_search)
@@ -598,11 +594,11 @@ class MainWindow(QMainWindow):
         nav_row = QHBoxLayout()
         nav_row.setSpacing(4)
         prev_btn = QPushButton("◀")
-        prev_btn.setFixedSize(24, 24)
+        prev_btn.setFixedSize(28, 28)
         prev_btn.setToolTip("上一张 (A/←)")
         prev_btn.clicked.connect(self._prev_image)
         next_btn = QPushButton("▶")
-        next_btn.setFixedSize(24, 24)
+        next_btn.setFixedSize(28, 28)
         next_btn.setToolTip("下一张 (D/→)")
         next_btn.clicked.connect(self._next_image)
         self.queue_counter_label = QLabel("0 / 0")
@@ -626,10 +622,10 @@ class MainWindow(QMainWindow):
         main_actions.setSpacing(4)
         save_btn = QPushButton("保存标注")
         save_btn.setObjectName("PrimaryButton")
-        save_btn.setFixedHeight(24)
+        save_btn.setFixedHeight(30)
         save_btn.clicked.connect(self._save_annotations)
         import_btn = QPushButton("导入")
-        import_btn.setFixedHeight(24)
+        import_btn.setFixedHeight(30)
         import_btn.clicked.connect(self._open_image_dir)
         main_actions.addWidget(save_btn, stretch=1)
         main_actions.addWidget(import_btn, stretch=1)
@@ -637,7 +633,7 @@ class MainWindow(QMainWindow):
 
         dataset_btn = QPushButton("生成训练数据集")
         dataset_btn.setObjectName("DatasetButton")
-        dataset_btn.setFixedHeight(28)
+        dataset_btn.setFixedHeight(30)
         dataset_btn.clicked.connect(self._generate_training_dataset_from_queue)
         queue_layout.addWidget(dataset_btn)
 
@@ -645,10 +641,10 @@ class MainWindow(QMainWindow):
         export_row.setSpacing(4)
         export_row.addWidget(QLabel("导出:"))
         yolo_btn = QPushButton("YOLO")
-        yolo_btn.setFixedHeight(24)
+        yolo_btn.setFixedHeight(28)
         yolo_btn.clicked.connect(self._generate_training_dataset_from_queue)
         export_btn = QPushButton("导出")
-        export_btn.setFixedHeight(24)
+        export_btn.setFixedHeight(28)
         export_btn.clicked.connect(lambda: self._switch_workspace(4))
         export_row.addWidget(yolo_btn)
         export_row.addWidget(export_btn)
@@ -666,34 +662,27 @@ class MainWindow(QMainWindow):
 
     def _wrap_workspace(self, title: str, subtitle: str, content: QWidget) -> QWidget:
         page = QWidget()
+        page.setObjectName("WorkspacePage")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(12)
+        layout.setContentsMargins(16, 0, 16, 12)
+        layout.setSpacing(10)
 
         header = QFrame()
-        header.setObjectName("Card")
+        header.setObjectName("WorkspaceHeader")
+        header.setFixedHeight(52)
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(14, 12, 14, 12)
-        header_layout.setSpacing(8)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(12)
 
-        title_box = QVBoxLayout()
-        title_box.setContentsMargins(0, 0, 0, 0)
         page_title = QLabel(title)
-        page_title.setObjectName("BrandTitle")
+        page_title.setObjectName("PageTitle")
         page_subtitle = QLabel(subtitle)
         page_subtitle.setObjectName("MutedText")
-        title_box.addWidget(page_title)
-        title_box.addWidget(page_subtitle)
-        header_layout.addLayout(title_box)
+        header_layout.addWidget(page_title)
+        header_layout.addWidget(page_subtitle)
         header_layout.addStretch()
         layout.addWidget(header)
-
-        content_card = QFrame()
-        content_card.setObjectName("Card")
-        content_layout = QVBoxLayout(content_card)
-        content_layout.setContentsMargins(10, 10, 10, 10)
-        content_layout.addWidget(content)
-        layout.addWidget(content_card, stretch=1)
+        layout.addWidget(content, stretch=1)
         return page
 
     def _populate_yolo_models(self) -> None:

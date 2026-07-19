@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 
 class SectionTitle(QLabel):
@@ -15,6 +16,8 @@ class StatusPill(QLabel):
     def __init__(self, text: str = "", variant: str = "", parent=None):
         super().__init__(text, parent)
         self.setObjectName("StatusPill")
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         if variant:
             self.setProperty("variant", variant)
 
@@ -28,8 +31,9 @@ class Card(QFrame):
     def __init__(self, title: str = "", parent=None):
         super().__init__(parent)
         self.setObjectName("Card")
+        self.setFrameShape(QFrame.Shape.NoFrame)
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(12, 12, 12, 12)
+        self.layout.setContentsMargins(12, 10, 12, 12)
         self.layout.setSpacing(8)
         if title:
             self.layout.addWidget(SectionTitle(title))
