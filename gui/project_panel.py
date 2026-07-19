@@ -302,12 +302,45 @@ class ProjectPanel(QWidget):
         )
         if delete_files == QMessageBox.StandardButton.Cancel:
             return
-        self.manager.delete_project(self.current_project, delete_files == QMessageBox.StandardButton.Yes)
+        self._release_media_handles()
+        try:
+            self.manager.delete_project(
+                self.current_project,
+                delete_files == QMessageBox.StandardButton.Yes,
+            )
+        except OSError as exc:
+            QMessageBox.critical(
+                self,
+                "删除失败",
+                f"无法删除项目文件夹（文件可能仍被占用）:\n{exc}\n\n"
+                "请先关闭视频抽帧窗口后重试。",
+            )
+            return
         self.current_project = None
         self.refresh_projects()
         self._set_project_controls_enabled(False)
         self.project_opened.emit({})
         self._log("项目已删除")
+
+    def _release_media_handles(self) -> None:
+        """Drop open video handles so Windows can delete project files."""
+        if self._video_capture_dialog is not None:
+            try:
+                extractor = getattr(self._video_capture_dialog, "extractor", None)
+                if extractor is not None:
+                    extractor.close()
+                if hasattr(self._video_capture_dialog, "_stop_playback"):
+                    self._video_capture_dialog._stop_playback()
+                self._video_capture_dialog.close()
+            except Exception:
+                pass
+            self._video_capture_dialog = None
+        host = self.window()
+        if host is not None and hasattr(host, "_release_project_media"):
+            try:
+                host._release_project_media()
+            except Exception:
+                pass
 
     def _on_project_selected(self, index: int) -> None:
         project = self.project_combo.itemData(index)

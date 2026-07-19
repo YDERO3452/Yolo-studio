@@ -115,6 +115,8 @@ class WorkflowOpsMixin:
                     self.dataset_panel.data_yaml_edit.setText(yaml_path)
                     self.training_panel.data_yaml_edit.setText(yaml_path)
                     self.workflow_panel.append_log(f"已自动生成 data.yaml: {yaml_path}")
+                    if hasattr(self, "_refresh_image_list_after_dataset_rebuild"):
+                        self._refresh_image_list_after_dataset_rebuild()
             except Exception as exc:
                 ex.finish_node(key, False, f"生成 data.yaml 失败: {exc}")
                 return

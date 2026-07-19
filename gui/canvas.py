@@ -1,6 +1,7 @@
 """Annotation canvas — multi-mode drawing for bbox, polygon, OBB, and keypoint."""
 
 import copy
+import os
 from collections import deque
 from enum import Enum
 
@@ -157,20 +158,19 @@ class AnnotationCanvas(QWidget):
         # Release previous image buffers before loading new one
         self._resized_buf = None
         self._display_bytes = None
+        self.original_image = None
 
-        # Use numpy to read file (handles non-ASCII paths like Chinese characters)
+        if not image_path or not os.path.isfile(image_path):
+            return False
+
         try:
             with open(image_path, "rb") as f:
                 data = np.frombuffer(f.read(), dtype=np.uint8)
             self.original_image = cv2.imdecode(data, cv2.IMREAD_COLOR)
+        except OSError:
+            return False
         except Exception:
-            # harmless: numpy fallback for paths with non-ASCII characters
-            self.original_image = cv2.imread(image_path)
-
-        # cv2.imdecode returns None on decode failure without raising —
-        # retry with cv2.imread which may handle the file differently
-        if self.original_image is None:
-            self.original_image = cv2.imread(image_path)
+            self.original_image = None
 
         if self.original_image is None:
             return False

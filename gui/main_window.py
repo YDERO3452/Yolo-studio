@@ -485,6 +485,7 @@ class MainWindow(WorkflowOpsMixin, AnnotationWorkbenchMixin, QMainWindow):
         self.annot_list.annotation_edit_requested.connect(self._on_edit_label)
         self.project_panel.project_opened.connect(self._on_project_opened)
         self.project_panel.data_yaml_ready.connect(self._on_project_data_yaml_ready)
+        self.dataset_panel.dataset_loaded.connect(self._on_dataset_panel_loaded)
         self.results_panel.load_inference_requested.connect(self._load_result_for_inference)
         self.results_panel.load_export_requested.connect(self._load_result_for_export)
         self._refresh_class_quick_buttons()
@@ -537,9 +538,24 @@ class MainWindow(WorkflowOpsMixin, AnnotationWorkbenchMixin, QMainWindow):
 
     def _return_to_workflow(self) -> None:
         """Close the node sheet and reveal the grid canvas."""
+        self._release_project_media()
         if hasattr(self, "stage_overlay"):
             self.stage_overlay.hide()
         self.statusBar().showMessage("已返回工作流画布", 2000)
+
+    def _release_project_media(self) -> None:
+        """Release VideoCapture so project files can be deleted on Windows."""
+        dialog = getattr(self, "_video_dialog", None)
+        if dialog is None:
+            return
+        try:
+            if hasattr(dialog, "_stop_playback"):
+                dialog._stop_playback()
+            extractor = getattr(dialog, "extractor", None)
+            if extractor is not None:
+                extractor.close()
+        except Exception:
+            pass
 
     def _switch_workspace(self, index: int) -> None:
         """Compatibility alias — stages open as canvas overlays."""
@@ -580,6 +596,8 @@ class MainWindow(WorkflowOpsMixin, AnnotationWorkbenchMixin, QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_project_opened(self, project: dict) -> None:
+        # Drop video handles from the previous project before switching roots.
+        self._release_project_media()
         if not project or not project.get("root"):
             self.current_project = None
             self.image_list = []
@@ -643,17 +661,45 @@ class MainWindow(WorkflowOpsMixin, AnnotationWorkbenchMixin, QMainWindow):
         self.dataset_panel.data_yaml_edit.setText(yaml_path)
         self.training_panel.data_yaml_edit.setText(yaml_path)
         if self.current_project:
-            self.image_list = ProjectManager.list_images(self.current_project)
-            self.current_image_dir = str(Path(self.current_project["root"]) / "images")
-            if self.image_list:
-                self.current_image_index = min(max(self.current_image_index, 0), len(self.image_list) - 1)
-            else:
-                self.current_image_index = -1
-            self.file_list.load_image_list(self.image_list)
-            if self.current_image_index >= 0:
-                self._load_current_image()
+            self._refresh_image_list_after_dataset_rebuild()
         self._switch_workspace(1)
         self.statusBar().showMessage(f"data.yaml 已生成: {yaml_path}", 3500)
+
+    def _on_dataset_panel_loaded(self, yaml_path: str) -> None:
+        """Keep training path in sync when user loads a dataset from the data panel."""
+        if not yaml_path:
+            return
+        self._last_dataset_yaml = yaml_path
+        self.training_panel.data_yaml_edit.setText(yaml_path)
+        if self.current_project:
+            self._refresh_image_list_after_dataset_rebuild()
+
+    def _refresh_image_list_after_dataset_rebuild(self) -> None:
+        """Reload image paths after train/val split moves files on disk."""
+        if self.current_project and self.current_project.get("root"):
+            self.image_list = ProjectManager.list_images(self.current_project)
+            self.current_image_dir = str(Path(self.current_project["root"]) / "images")
+        else:
+            self.image_list = [p for p in self.image_list if os.path.isfile(p)]
+        if self.image_list:
+            self.current_image_index = min(
+                max(self.current_image_index, 0),
+                len(self.image_list) - 1,
+            )
+            self.current_image_path = self.image_list[self.current_image_index]
+        else:
+            self.current_image_index = -1
+            self.current_image_path = None
+        if hasattr(self, "file_list"):
+            self.file_list.load_image_list(self.image_list)
+            if self.current_image_index >= 0:
+                self.file_list.highlight_current(self.current_image_index)
+        if self.current_image_index >= 0:
+            self._load_current_image()
+        elif hasattr(self, "canvas"):
+            self.canvas.clear_shapes()
+            self.canvas.original_image = None
+            self.canvas.update()
 
     def _load_result_for_inference(self, model_path: str) -> None:
         self._switch_workspace(2)
@@ -734,8 +780,11 @@ class MainWindow(WorkflowOpsMixin, AnnotationWorkbenchMixin, QMainWindow):
             self.model_pill.setText(os.path.basename(best_pt))
 
     def closeEvent(self, event) -> None:
+        self._release_project_media()
         if hasattr(self, "project_panel"):
             self.project_panel.shutdown()
+            if hasattr(self.project_panel, "_release_media_handles"):
+                self.project_panel._release_media_handles()
         # Stop LLM workers
         if self._llm_batch_worker and self._llm_batch_worker.isRunning():
             self._llm_batch_worker.stop()

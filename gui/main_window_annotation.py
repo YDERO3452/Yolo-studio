@@ -45,6 +45,7 @@ from PyQt6.QtWidgets import (
 from core.annotation import ShapeType
 from core.dataset import DatasetManager
 from core.image_utils import read_image_size
+from core.project_manager import ProjectManager
 from gui.annotation_io import (
     label_path_for_image,
     labels_dir_for_image_dir,
@@ -649,9 +650,27 @@ class AnnotationWorkbenchMixin:
         if not (0 <= self.current_image_index < len(self.image_list)):
             return
         path = self.image_list[self.current_image_index]
-        if not self.canvas.load_image(path):
-            QMessageBox.warning(self, "错误", f"无法加载图片:\n{path}")
-            return
+        if not os.path.isfile(path) or not self.canvas.load_image(path):
+            # Path may be stale after train/val split — drop missing and refresh.
+            missing = path
+            self.image_list = [p for p in self.image_list if os.path.isfile(p)]
+            if self.current_project and self.current_project.get("root"):
+                refreshed = ProjectManager.list_images(self.current_project)
+                if refreshed:
+                    self.image_list = refreshed
+                    self.current_image_dir = str(Path(self.current_project["root"]) / "images")
+            self.file_list.load_image_list(self.image_list)
+            if not self.image_list:
+                self.current_image_index = -1
+                self.current_image_path = None
+                QMessageBox.warning(self, "错误", f"无法加载图片（文件不存在）:\n{missing}")
+                self._update_status()
+                return
+            self.current_image_index = min(self.current_image_index, len(self.image_list) - 1)
+            path = self.image_list[self.current_image_index]
+            if not self.canvas.load_image(path):
+                QMessageBox.warning(self, "错误", f"无法加载图片:\n{path}")
+                return
         self.current_image_path = path
         self.canvas.set_classes(self.class_manager.get_all_classes())
         self._load_annotations_for_image(path)
@@ -969,6 +988,9 @@ class AnnotationWorkbenchMixin:
         if not self.image_list:
             return None
         images_dir = self.current_image_dir or os.path.dirname(self.image_list[0])
+        # Prefer project images/ root so train/val split stays under the project.
+        if self.current_project and self.current_project.get("root"):
+            images_dir = str(Path(self.current_project["root"]) / "images")
         labels_dir = labels_dir_for_image_dir(images_dir)
         try:
             yaml_path = DatasetManager.build_data_yaml(
@@ -982,6 +1004,9 @@ class AnnotationWorkbenchMixin:
             self._last_dataset_yaml = yaml_path
             self.dataset_panel.data_yaml_edit.setText(yaml_path)
             self.training_panel.data_yaml_edit.setText(yaml_path)
+            # Split moves files out of video_frames/ — refresh the queue paths.
+            if hasattr(self, "_refresh_image_list_after_dataset_rebuild"):
+                self._refresh_image_list_after_dataset_rebuild()
             return yaml_path
         except Exception as exc:
             logger.error(f"Failed to build data.yaml: {exc}")
@@ -1914,9 +1939,8 @@ class AnnotationWorkbenchMixin:
 
         # 没有项目时自动创建一个
         if not self.current_project:
-            from core.project_manager import ProjectManager as _PM
-            pm = _PM()
-            project = pm.create_project(str(Path("data").resolve()), "视频截帧项目")
+            pm = ProjectManager()
+            project = pm.create_project("视频截帧", task="detect")
             pm.import_images(project, valid_paths)
             self.current_project = pm.open_project(project["root"])
             self._on_project_opened(self.current_project)

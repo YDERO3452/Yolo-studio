@@ -9,6 +9,7 @@ Ultralytics directly.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import xml.etree.ElementTree as ET
@@ -132,7 +133,45 @@ class ProjectManager:
         ]
         self._save_registry(projects)
         if delete_files and root.exists() and self._is_inside_workspace(root):
-            shutil.rmtree(root)
+            self._rmtree_retry(root)
+
+    @staticmethod
+    def _rmtree_retry(root: Path, attempts: int = 8) -> None:
+        """Delete a project folder; retry when Windows locks files (open video, etc.)."""
+        import gc
+        import stat
+        import time
+
+        gc.collect()
+
+        def _onexc(func, path, exc):
+            try:
+                os.chmod(path, stat.S_IWRITE)
+                func(path)
+            except Exception:
+                raise exc
+
+        last_error: Optional[BaseException] = None
+        for attempt in range(attempts):
+            try:
+                if not root.exists():
+                    return
+                shutil.rmtree(root, onexc=_onexc)
+                return
+            except PermissionError as exc:
+                last_error = exc
+                time.sleep(0.2 * (attempt + 1))
+                gc.collect()
+            except OSError as exc:
+                # WinError 32 often surfaces as PermissionError; keep retrying alike.
+                if getattr(exc, "winerror", None) == 32 or isinstance(exc, PermissionError):
+                    last_error = exc
+                    time.sleep(0.2 * (attempt + 1))
+                    gc.collect()
+                    continue
+                raise
+        if last_error is not None:
+            raise last_error
 
     def touch_project(self, project: dict[str, Any]) -> dict[str, Any]:
         project = dict(project)
