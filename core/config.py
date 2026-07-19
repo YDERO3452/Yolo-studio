@@ -142,7 +142,7 @@ class ExportConfig(BaseModel):
 class AppGeneralConfig(BaseModel):
     name: str = "YOLO Studio"
     version: str = "1.0.0"
-    theme: str = "dark"
+    theme: str = "light"
     language: str = "zh"
 
 

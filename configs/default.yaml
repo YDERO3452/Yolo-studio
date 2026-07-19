@@ -4,7 +4,7 @@
 app:
   name: "YOLO Studio"
   version: "1.0.0"
-  theme: "dark"
+  theme: "light"
   language: "zh"
 
 training:

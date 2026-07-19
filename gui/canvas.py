@@ -384,7 +384,7 @@ class AnnotationCanvas(QWidget):
 
         # Zoom indicator
         if self.zoom_level != 1.0:
-            painter.setPen(QColor(200, 200, 200, 180))
+            painter.setPen(QColor(Theme.TEXT))
             font = QFont()
             font.setPointSize(10)
             painter.setFont(font)

@@ -184,7 +184,7 @@ class MainWindow(WorkflowOpsMixin, AnnotationWorkbenchMixin, QMainWindow):
                 self._stage_meta[spec.workspace_index] = (spec.title, spec.subtitle, spec.accent)
         self._stage_meta[STAGE_PROJECT] = ("管理项目", "创建 / 打开项目", "#2F6FED")
         self._stage_meta[STAGE_VIDEO] = ("视频截帧", "抽帧进数据集", "#2F6FED")
-        self._stage_meta[STAGE_ENV] = ("环境", "CUDA / PyTorch", "#666666")
+        self._stage_meta[STAGE_ENV] = ("环境", "CUDA / PyTorch", "#5C6B7A")
         self._stage_meta[STAGE_FORMAT] = ("格式转换", "YOLO / VOC / COCO", "#2F6FED")
         self._stage_meta[STAGE_NAMEMAP] = ("类别名映射", "模型名 ↔ 项目类", "#1B7F5A")
 

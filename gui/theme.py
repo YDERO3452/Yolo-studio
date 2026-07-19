@@ -21,9 +21,9 @@ class Theme:
     WARNING = "#B86E00"
     DANGER = "#C62828"
     SELECTION = "#D6E4FF"
-    # Mid gray — matches light chrome (LabelImg), not pitch-black
-    CANVAS_BG = "#7A7A7A"
-    CANVAS_HINT = "#F0F0F0"
+    # Light mid-gray stage — enough contrast for images, no dark-mode slab
+    CANVAS_BG = "#D4D4D4"
+    CANVAS_HINT = "#555555"
 
 
 def build_stylesheet() -> str:
@@ -103,7 +103,7 @@ def build_stylesheet() -> str:
         border-bottom: 1px solid {Theme.BORDER};
     }}
     QWidget#StageOverlayDim {{
-        background: rgba(40, 40, 40, 90);
+        background: {Theme.BG};
     }}
     QWidget#StageOverlay {{
         background: {Theme.SURFACE_2};

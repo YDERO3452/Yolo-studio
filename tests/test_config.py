@@ -103,7 +103,7 @@ class TestAppGeneralConfig:
     def test_defaults(self):
         cfg = AppGeneralConfig()
         assert cfg.name == "YOLO Studio"
-        assert cfg.theme == "dark"
+        assert cfg.theme == "light"
         assert cfg.language == "zh"
 
 

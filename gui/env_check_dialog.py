@@ -91,7 +91,7 @@ class EnvironmentCheckDialog(QDialog):
         self._diag: list[DiagnosisItem] = []
 
         self._init_ui()
-        self._apply_dark_style()
+        self._apply_theme_style()
         self._start_detection()
 
     def _init_ui(self):
@@ -228,7 +228,7 @@ class EnvironmentCheckDialog(QDialog):
 
         layout.addLayout(btn_layout)
 
-    def _apply_dark_style(self):
+    def _apply_theme_style(self):
         self.setStyleSheet(build_stylesheet())
 
     def _start_detection(self):

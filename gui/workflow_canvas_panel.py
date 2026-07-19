@@ -71,11 +71,11 @@ SUB_STAGES: tuple[StageSpec, ...] = (
     StageSpec("namemap", "类别映射", "模型名 ↔ 项目类", -1, "#1B7F5A", "sub", "annotate", "dialog:namemap"),
     StageSpec("stats", "统计", "类别分布与报告", -1, "#5A6A7A", "sub", "quality", "stage:5:0"),
     StageSpec("flow", "流程", "批量与预设", -1, "#5A6A7A", "sub", "quality", "stage:5:1"),
-    StageSpec("env", "环境", "CUDA / PyTorch", -1, "#666666", "sub", "system", "dialog:env"),
+    StageSpec("env", "环境", "CUDA / PyTorch", -1, "#5C6B7A", "sub", "system", "dialog:env"),
 )
 
 UTILITY_STAGES: tuple[StageSpec, ...] = (
-    StageSpec("system", "系统", "环境与本机配置", -1, "#666666", "utility", None, "dialog:env"),
+    StageSpec("system", "系统", "环境与本机配置", -1, "#5C6B7A", "utility", None, "dialog:env"),
 )
 
 ALL_STAGES: tuple[StageSpec, ...] = MAIN_STAGES + UTILITY_STAGES + SUB_STAGES

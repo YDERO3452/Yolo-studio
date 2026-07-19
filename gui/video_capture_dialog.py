@@ -151,7 +151,7 @@ class VideoCaptureDialog(QDialog):
         self._current_frame_idx = 0
 
         self._init_ui()
-        self._apply_dark_style()
+        self._apply_theme_style()
 
     # ------------------------------------------------------------------
     # UI Setup
@@ -432,7 +432,7 @@ class VideoCaptureDialog(QDialog):
         # Initialize mode visibility
         self._on_mode_changed(0)
 
-    def _apply_dark_style(self):
+    def _apply_theme_style(self):
         self.setStyleSheet(build_stylesheet())
 
     # ------------------------------------------------------------------
