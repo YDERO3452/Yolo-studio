@@ -25,6 +25,49 @@ def sample_detections():
 # ---------------------------------------------------------------------------
 
 class TestYOLOFormat:
+    def test_detections_to_yolo_zero_size_returns_empty(self, converter, sample_detections):
+        assert converter.detections_to_yolo(sample_detections, 0, 600) == ""
+        assert converter.detections_to_yolo(sample_detections, 800, 0) == ""
+
+    def test_convert_folder_nested_train_val(self, converter, tmp_path, monkeypatch):
+        """Labels under labels/train|val must convert with matching images."""
+        images = tmp_path / "images"
+        labels = tmp_path / "labels"
+        (images / "train").mkdir(parents=True)
+        (images / "val").mkdir(parents=True)
+        (labels / "train").mkdir(parents=True)
+        (labels / "val").mkdir(parents=True)
+        (images / "train" / "a.jpg").write_bytes(b"fake")
+        (images / "val" / "b.jpg").write_bytes(b"fake")
+        (labels / "train" / "a.txt").write_text("0 0.5 0.5 0.2 0.2\n", encoding="utf-8")
+        (labels / "val" / "b.txt").write_text("1 0.4 0.4 0.1 0.1\n", encoding="utf-8")
+
+        class _FakeImage:
+            width = 64
+            height = 48
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        import sys
+        from types import SimpleNamespace
+
+        fake_pil = SimpleNamespace(Image=SimpleNamespace(open=lambda *a, **k: _FakeImage()))
+        monkeypatch.setitem(sys.modules, "PIL", fake_pil)
+        monkeypatch.setitem(sys.modules, "PIL.Image", fake_pil.Image)
+
+        out = tmp_path / "voc_out"
+        results = converter.convert_folder(
+            str(labels), str(out), "yolo", "voc", image_dir=str(images)
+        )
+        assert len(results) == 2
+        assert all(r.success for r in results)
+        assert (out / "train" / "a.xml").is_file()
+        assert (out / "val" / "b.xml").is_file()
+
     def test_detections_to_yolo(self, converter, sample_detections):
         out = converter.detections_to_yolo(sample_detections, 800, 600)
         lines = out.strip().split("\n")

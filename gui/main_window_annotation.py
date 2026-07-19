@@ -585,27 +585,19 @@ class AnnotationWorkbenchMixin:
         if os.path.isdir(sub_dir):
             # User selected the dataset root which has an images/ sub-dir.
             # Collect images from all images/ subdirectories (train/val/test…)
-            image_list = []
-            for entry in sorted(os.listdir(sub_dir)):
-                entry_path = os.path.join(sub_dir, entry)
-                if os.path.isdir(entry_path):
-                    # e.g. images/train/, images/val/
-                    image_list.extend([
-                        os.path.join(entry_path, name)
-                        for name in sorted(os.listdir(entry_path))
-                        if os.path.splitext(name)[1].lower() in IMAGE_EXTENSIONS
-                    ])
-                elif os.path.splitext(entry)[1].lower() in IMAGE_EXTENSIONS:
-                    # images/ directly contains image files
-                    image_list.append(entry_path)
+            image_list = [
+                str(path)
+                for path in sorted(Path(sub_dir).rglob("*"))
+                if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
+            ]
             images_dir = sub_dir
         else:
             # No images/ sub-dir — the selected dir may itself be
             # images/train/ or just a plain folder of images.
             image_list = [
-                os.path.join(dir_path, name)
-                for name in os.listdir(dir_path)
-                if os.path.splitext(name)[1].lower() in IMAGE_EXTENSIONS
+                str(path)
+                for path in sorted(Path(dir_path).rglob("*"))
+                if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
             ]
 
         self.image_list = sorted(image_list)

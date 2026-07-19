@@ -89,6 +89,9 @@ class FormatConverter:
         if not os.path.exists(yolo_file):
             logger.warning(f"YOLO file not found: {yolo_file}")
             return detections
+        if image_width <= 0 or image_height <= 0:
+            logger.warning(f"Invalid image size for {yolo_file}: {image_width}x{image_height}")
+            return detections
 
         try:
             with open(yolo_file, 'r', encoding='utf-8') as f:
@@ -141,6 +144,9 @@ class FormatConverter:
         Returns:
             YOLO format string
         """
+        if image_width <= 0 or image_height <= 0:
+            return ""
+
         lines = []
 
         for det in detections:
@@ -479,7 +485,13 @@ class FormatConverter:
                 input_dir, output_dir, input_format, image_dir, progress_callback
             )
 
-        input_files = list(Path(input_dir).glob(f"*.{self.FORMAT_EXTENSIONS.get(input_format, 'txt')}"))
+        image_dir = self._resolve_image_dir(input_dir, image_dir)
+        input_root = Path(input_dir)
+        ext = self.FORMAT_EXTENSIONS.get(input_format, 'txt')
+        input_files = sorted(
+            f for f in input_root.rglob(f"*.{ext}")
+            if f.is_file() and f.name.lower() != "classes.txt"
+        )
         logger.info(f"Found {len(input_files)} files to convert")
 
         results = []
@@ -500,8 +512,9 @@ class FormatConverter:
 
                 # Resolve image file for dimensions
                 img_width, img_height = 0, 0
+                image_file = None
                 if input_format in ('yolo', 'dota') or output_format in ('yolo', 'voc'):
-                    search_dir = Path(image_dir) if image_dir else input_dir
+                    search_dir = Path(image_dir) if image_dir else input_root
                     image_file = self._find_image_file_in_dir(input_file, search_dir)
                     if image_file:
                         from PIL import Image
@@ -536,8 +549,13 @@ class FormatConverter:
                     results.append(result)
                     continue
 
-                # Save in output format
-                output_file = Path(output_dir) / input_file.stem
+                # Preserve train/val relative layout under the output root
+                try:
+                    rel = input_file.relative_to(input_root)
+                except ValueError:
+                    rel = Path(input_file.name)
+                output_file = Path(output_dir) / rel
+                output_file.parent.mkdir(parents=True, exist_ok=True)
                 if output_format == 'yolo':
                     output_file = output_file.with_suffix('.txt')
                     content = self.detections_to_yolo(detections, img_width, img_height)
@@ -694,7 +712,13 @@ class FormatConverter:
         Collects all per-image annotation files and merges them
         into a single COCO JSON file.
         """
-        input_files = list(Path(input_dir).glob(f"*.{self.FORMAT_EXTENSIONS.get(input_format, 'txt')}"))
+        image_dir = self._resolve_image_dir(input_dir, image_dir)
+        input_root = Path(input_dir)
+        ext = self.FORMAT_EXTENSIONS.get(input_format, 'txt')
+        input_files = sorted(
+            f for f in input_root.rglob(f"*.{ext}")
+            if f.is_file() and f.name.lower() != "classes.txt"
+        )
         logger.info(f"Found {len(input_files)} files to convert to COCO")
 
         results = []
@@ -776,13 +800,65 @@ class FormatConverter:
         logger.info(f"COCO output written: {output_file} ({ann_id} annotations)")
         return results
 
+    def _resolve_image_dir(self, input_dir: str, image_dir: Optional[str]) -> Optional[str]:
+        """Best-effort locate images/ next to a labels folder."""
+        if image_dir and Path(image_dir).is_dir():
+            return image_dir
+        root = Path(input_dir)
+        candidates = [
+            root / "images",
+            root.parent / "images",
+        ]
+        if root.name == "labels":
+            candidates.insert(0, root.parent / "images")
+        for candidate in candidates:
+            if candidate.is_dir():
+                return str(candidate)
+        return image_dir
+
     def _find_image_file_in_dir(self, annotation_file: Path, search_dir: Path) -> Optional[Path]:
-        """Find corresponding image file in a specific directory."""
+        """Find corresponding image file for an annotation.
+
+        Supports flat folders and YOLO ``labels/train`` ↔ ``images/train`` layout.
+        """
         image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp']
+        search_dir = Path(search_dir)
+        annotation_file = Path(annotation_file)
+
         for ext in image_extensions:
-            image_file = search_dir / f"{annotation_file.stem}{ext}"
-            if image_file.exists():
-                return image_file
+            flat = search_dir / f"{annotation_file.stem}{ext}"
+            if flat.is_file():
+                return flat
+
+        parts = list(annotation_file.parts)
+        for i in range(len(parts) - 1, -1, -1):
+            if parts[i] == "labels":
+                for ext in image_extensions:
+                    candidate = Path(*parts[:i], "images", *parts[i + 1:]).with_suffix(ext)
+                    if candidate.is_file():
+                        return candidate
+                break
+
+        # Mirror relative path under search_dir when labels live in train/val subdirs
+        for parent_name in ("labels", "Annotations", "annotations"):
+            try:
+                idx = parts.index(parent_name)
+                rel = Path(*parts[idx + 1:]).with_suffix("")
+                for ext in image_extensions:
+                    candidate = search_dir / rel.with_suffix(ext)
+                    if candidate.is_file():
+                        return candidate
+                    candidate = search_dir / parts[idx + 1] / f"{annotation_file.stem}{ext}" if idx + 1 < len(parts) else None
+                    if candidate is not None and candidate.is_file():
+                        return candidate
+            except ValueError:
+                pass
+
+        if search_dir.is_dir():
+            for ext in image_extensions:
+                matches = list(search_dir.rglob(f"{annotation_file.stem}{ext}"))
+                if matches:
+                    return matches[0]
         return None
 
     def _get_extension(self, format_name: str) -> str:
