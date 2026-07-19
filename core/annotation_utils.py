@@ -3,9 +3,53 @@
 from collections import Counter
 from pathlib import Path
 from typing import Counter as CounterType
-from typing import List
+from typing import List, Optional
 
 from loguru import logger
+
+
+def find_label_file(
+    image_file: Path,
+    annotation_dir: str | Path,
+    image_dir: Optional[str | Path] = None,
+) -> Optional[Path]:
+    """Resolve the YOLO label path for an image.
+
+    Tries, in order:
+    1. Official Ultralytics layout (``.../images/...`` → ``.../labels/...``)
+    2. Relative mirror under *annotation_dir* (``train/a.jpg`` → ``labels/train/a.txt``)
+    3. Flat ``annotation_dir/<stem>.txt``
+    4. Label beside the image (legacy)
+    """
+    image_file = Path(image_file)
+    annotation_dir = Path(annotation_dir)
+    candidates: list[Path] = []
+
+    parts = list(image_file.parts)
+    for i in range(len(parts) - 1, -1, -1):
+        if parts[i] == "images":
+            candidates.append(Path(*parts[:i], "labels", *parts[i + 1:]).with_suffix(".txt"))
+            break
+
+    if image_dir is not None:
+        try:
+            rel = image_file.relative_to(Path(image_dir))
+            candidates.append(annotation_dir / rel.with_suffix(".txt"))
+        except ValueError:
+            pass
+
+    candidates.append(annotation_dir / f"{image_file.stem}.txt")
+    candidates.append(image_file.with_suffix(".txt"))
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def collect_annotation_stats(image_dir: str, annotation_dir: str,
@@ -38,8 +82,9 @@ def collect_annotation_stats(image_dir: str, annotation_dir: str,
           no matching label file.
     """
     image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+    image_root = Path(image_dir)
     image_files = [
-        f for f in Path(image_dir).rglob("*")
+        f for f in image_root.rglob("*")
         if f.is_file() and f.suffix.lower() in image_extensions
     ]
 
@@ -51,10 +96,9 @@ def collect_annotation_stats(image_dir: str, annotation_dir: str,
     missing_annotations: List[str] = []
 
     for image_file in image_files:
-        ann_file = Path(annotation_dir) / image_file.stem
-        ann_file = ann_file.with_suffix(".txt")
+        ann_file = find_label_file(image_file, annotation_dir, image_root)
 
-        if not ann_file.exists():
+        if ann_file is None:
             missing_annotations.append(image_file.name)
             continue
 

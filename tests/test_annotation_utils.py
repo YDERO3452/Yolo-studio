@@ -91,3 +91,26 @@ class TestCollectAnnotationStats:
             collect_annotation_stats(str(img_dir), str(ann_dir), ["class0"])
 
         assert total_img == 1
+
+    def test_train_val_labels_are_matched(self, tmp_path):
+        """After split, labels live under labels/train|val and must be found."""
+        images = tmp_path / "images"
+        (images / "train").mkdir(parents=True)
+        (images / "val").mkdir(parents=True)
+        (images / "train" / "a.jpg").touch()
+        (images / "val" / "b.jpg").touch()
+
+        labels = tmp_path / "labels"
+        (labels / "train").mkdir(parents=True)
+        (labels / "val").mkdir(parents=True)
+        (labels / "train" / "a.txt").write_text("0 0.5 0.5 0.2 0.2\n", encoding="utf-8")
+        (labels / "val" / "b.txt").write_text("1 0.4 0.4 0.1 0.1\n", encoding="utf-8")
+
+        total_img, total_ann, annotated, class_dist, _, missing = collect_annotation_stats(
+            str(images), str(labels), ["cat", "dog"]
+        )
+        assert total_img == 2
+        assert annotated == 2
+        assert total_ann == 2
+        assert missing == []
+        assert class_dist == {"cat": 1, "dog": 1}

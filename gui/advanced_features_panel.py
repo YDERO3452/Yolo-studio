@@ -300,17 +300,27 @@ class AdvancedFeaturesPanel(QWidget):
 
     def collect_statistics(self):
         """Collect statistics in background thread."""
-        if not hasattr(self, 'stats_dir'):
+        if not hasattr(self, 'stats_dir') or not self.stats_dir:
             QMessageBox.warning(self, "错误", "请选择目录")
             return
+
+        from gui.annotation_io import labels_dir_for_image_dir
+
+        image_dir = self.stats_dir
+        labels_dir = labels_dir_for_image_dir(image_dir)
+        # If user picked a project root, prefer images/ + labels/
+        root = Path(image_dir)
+        if (root / "images").is_dir():
+            image_dir = str(root / "images")
+            labels_dir = str(root / "labels") if (root / "labels").is_dir() else labels_dir_for_image_dir(image_dir)
 
         self.collect_stats_btn.setEnabled(False)
         self.stats_progress.setRange(0, 0)  # indeterminate
 
         self._stats_worker = _StatsCollectWorker(
             self.collector,
-            self.stats_dir,
-            self.stats_dir,
+            image_dir,
+            labels_dir,
             self.class_manager.get_all_classes(),
         )
         self._stats_worker.finished.connect(self._on_stats_collected)

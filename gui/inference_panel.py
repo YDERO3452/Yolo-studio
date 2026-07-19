@@ -786,9 +786,14 @@ class InferencePanel(QWidget):
 
     def _get_imgsz_value(self) -> int:
         """Get the numeric imgsz from the combo box selection."""
-        text = self.imgsz_combo.currentText()
+        text = (self.imgsz_combo.currentText() or "").strip()
         # Extract leading number: "320 (最快)" → 320
-        return int(text.split()[0])
+        if not text:
+            return 640
+        try:
+            return int(text.split()[0])
+        except (ValueError, IndexError):
+            return 640
 
     def load_model(self, *, quiet: bool = False):
         from core.inference import YOLOInference

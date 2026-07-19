@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 from loguru import logger
 
-from core.annotation_utils import collect_annotation_stats
+from core.annotation_utils import collect_annotation_stats, find_label_file
 
 
 @dataclass
@@ -208,10 +208,9 @@ class AnnotationValidator:
         report["total_images"] = len(image_files)
 
         for image_file in image_files:
-            ann_file = Path(annotation_dir) / image_file.stem
-            ann_file = ann_file.with_suffix(".txt")
+            ann_file = find_label_file(image_file, annotation_dir, image_dir)
 
-            if not ann_file.exists():
+            if ann_file is None:
                 report["missing_annotations"].append(image_file.name)
             else:
                 report["annotated_images"] += 1

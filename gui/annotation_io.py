@@ -210,7 +210,12 @@ def save_yolo_shapes(
     if label_dir:
         os.makedirs(label_dir, exist_ok=True)
 
-    lines = [_shape_to_yolo_line(shape, image_width, image_height) for shape in shapes]
+    lines = []
+    if image_width > 0 and image_height > 0:
+        lines = [_shape_to_yolo_line(shape, image_width, image_height) for shape in shapes]
+    else:
+        from loguru import logger
+        logger.warning(f"Skip save for {image_path}: invalid image size {image_width}x{image_height}")
     with open(label_path, "w", encoding="utf-8") as f:
         for line in lines:
             if line:

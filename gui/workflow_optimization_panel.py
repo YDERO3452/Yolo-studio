@@ -526,10 +526,19 @@ class WorkflowOptimizationPanel(QWidget):
 
         self.validate_btn.setEnabled(False)
 
+        from gui.annotation_io import labels_dir_for_image_dir
+
+        image_dir = self.validate_input_dir
+        labels_dir = labels_dir_for_image_dir(image_dir)
+        root = Path(image_dir)
+        if (root / "images").is_dir():
+            image_dir = str(root / "images")
+            labels_dir = str(root / "labels") if (root / "labels").is_dir() else labels_dir_for_image_dir(image_dir)
+
         # Run validation
         result = self.validator.validate_folder(
-            self.validate_input_dir,
-            self.validate_input_dir,
+            image_dir,
+            labels_dir,
             self.class_manager.get_all_classes(),
         )
 
@@ -565,10 +574,19 @@ class WorkflowOptimizationPanel(QWidget):
 
         self.quality_check_btn.setEnabled(False)
 
+        from gui.annotation_io import labels_dir_for_image_dir
+
+        image_dir = self.quality_input_dir
+        labels_dir = labels_dir_for_image_dir(image_dir)
+        root = Path(image_dir)
+        if (root / "images").is_dir():
+            image_dir = str(root / "images")
+            labels_dir = str(root / "labels") if (root / "labels").is_dir() else labels_dir_for_image_dir(image_dir)
+
         # Run quality check
         metrics = self.quality_checker.check_quality(
-            self.quality_input_dir,
-            self.quality_input_dir,
+            image_dir,
+            labels_dir,
             self.class_manager.get_all_classes(),
         )
 
