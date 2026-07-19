@@ -29,7 +29,7 @@ class BatchProcessingConfig:
     max_detections: int = 300
     output_format: str = "yolo"  # yolo, coco, voc
     save_images: bool = False
-    device: str = "0"
+    device: str = ""
 
 
 @dataclass
@@ -200,6 +200,29 @@ class BatchProcessor:
         else:
             logger.warning(f"Unknown output format: {config.output_format}")
 
+    @staticmethod
+    def _bbox_xyxy(det: Dict[str, Any]) -> Optional[tuple[float, float, float, float]]:
+        """Normalize bbox from dict or list/tuple into x1,y1,x2,y2."""
+        bbox = det.get("bbox")
+        if bbox is None:
+            return None
+        if isinstance(bbox, dict):
+            try:
+                return (
+                    float(bbox["x1"]),
+                    float(bbox["y1"]),
+                    float(bbox["x2"]),
+                    float(bbox["y2"]),
+                )
+            except (KeyError, TypeError, ValueError):
+                return None
+        if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+            try:
+                return float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
+            except (TypeError, ValueError):
+                return None
+        return None
+
     def _save_yolo_format(
         self,
         image_path: Path,
@@ -207,14 +230,23 @@ class BatchProcessor:
         output_file: Path,
     ) -> None:
         """Save detections in YOLO format."""
-        from PIL import Image
-        img = Image.open(image_path)
-        img_width, img_height = img.size
+        from core.image_utils import read_image_size
+
+        img_width, img_height = read_image_size(str(image_path))
+        if img_width <= 0 or img_height <= 0:
+            from PIL import Image
+
+            with Image.open(image_path) as img:
+                img_width, img_height = img.size
+        if img_width <= 0 or img_height <= 0:
+            raise ValueError(f"Invalid image size for {image_path}")
 
         with open(output_file, "w", encoding="utf-8") as f:
             for det in detections:
-                bbox = det["bbox"]  # [x1, y1, x2, y2]
-                x1, y1, x2, y2 = bbox
+                xyxy = self._bbox_xyxy(det)
+                if xyxy is None:
+                    continue
+                x1, y1, x2, y2 = xyxy
 
                 # Convert to YOLO format (normalized center coordinates)
                 x_center = ((x1 + x2) / 2) / img_width
@@ -241,8 +273,10 @@ class BatchProcessor:
         }
 
         for det in detections:
-            bbox = det["bbox"]  # [x1, y1, x2, y2]
-            x1, y1, x2, y2 = bbox
+            xyxy = self._bbox_xyxy(det)
+            if xyxy is None:
+                continue
+            x1, y1, x2, y2 = xyxy
             width = x2 - x1
             height = y2 - y1
 
@@ -266,9 +300,14 @@ class BatchProcessor:
         output_file: Path,
     ) -> None:
         """Save detections in VOC XML format."""
-        from PIL import Image
-        img = Image.open(image_path)
-        img_width, img_height = img.size
+        from core.image_utils import read_image_size
+
+        img_width, img_height = read_image_size(str(image_path))
+        if img_width <= 0 or img_height <= 0:
+            from PIL import Image
+
+            with Image.open(image_path) as img:
+                img_width, img_height = img.size
 
         root_str = f"""<?xml version="1.0" encoding="UTF-8"?>
 <annotation>
@@ -281,9 +320,16 @@ class BatchProcessor:
 """
 
         for det in detections:
-            bbox = det["bbox"]  # [x1, y1, x2, y2]
-            x1, y1, x2, y2 = bbox
-            class_name = self.class_names[det["class_id"]]
+            xyxy = self._bbox_xyxy(det)
+            if xyxy is None:
+                continue
+            x1, y1, x2, y2 = xyxy
+            class_id = int(det.get("class_id", 0))
+            class_name = (
+                self.class_names[class_id]
+                if 0 <= class_id < len(self.class_names)
+                else str(class_id)
+            )
 
             root_str += f"""    <object>
         <name>{class_name}</name>

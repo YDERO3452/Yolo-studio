@@ -403,7 +403,7 @@ class WorkflowOptimizationPanel(QWidget):
                 self.export_output_dir,
                 input_fmt,
                 output_fmt,
-                image_dir=self.export_input_dir,
+                image_dir=None,
                 progress_callback=on_progress,
             )
 

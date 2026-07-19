@@ -184,6 +184,7 @@ class ClassManager:
         # Generate color for new class
         color = self._generate_color(len(self.colors))
         self.colors[class_name] = color
+        self.save()
         logger.info(f"Added class '{class_name}' with color {color}")
         return True
 
@@ -203,6 +204,7 @@ class ClassManager:
         self.classes.remove(class_name)
         if class_name in self.colors:
             del self.colors[class_name]
+        self.save()
         logger.info(f"Removed class '{class_name}'")
         return True
 
@@ -231,6 +233,7 @@ class ClassManager:
         if old_name in self.colors:
             self.colors[new_name] = self.colors.pop(old_name)
 
+        self.save()
         logger.info(f"Renamed class '{old_name}' to '{new_name}'")
         return True
 
@@ -260,6 +263,7 @@ class ClassManager:
             return False
 
         self.colors[class_name] = color
+        self.save()
         logger.debug(f"Set color for class '{class_name}' to {color}")
         return True
 

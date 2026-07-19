@@ -801,20 +801,26 @@ class FormatConverter:
         return results
 
     def _resolve_image_dir(self, input_dir: str, image_dir: Optional[str]) -> Optional[str]:
-        """Best-effort locate images/ next to a labels folder."""
-        if image_dir and Path(image_dir).is_dir():
-            return image_dir
+        """Best-effort locate images/ next to a labels folder.
+
+        Prefer the sibling ``images/`` layout over a caller-provided path that
+        accidentally points at the labels directory itself.
+        """
         root = Path(input_dir)
-        candidates = [
-            root / "images",
-            root.parent / "images",
-        ]
+        preferred: list[Path] = []
         if root.name == "labels":
-            candidates.insert(0, root.parent / "images")
-        for candidate in candidates:
+            preferred.append(root.parent / "images")
+        preferred.append(root / "images")
+        preferred.append(root.parent / "images")
+        for candidate in preferred:
             if candidate.is_dir():
                 return str(candidate)
-        return image_dir
+
+        if image_dir:
+            img_root = Path(image_dir)
+            if img_root.is_dir() and img_root.resolve() != root.resolve():
+                return image_dir
+        return None
 
     def _find_image_file_in_dir(self, annotation_file: Path, search_dir: Path) -> Optional[Path]:
         """Find corresponding image file for an annotation.
