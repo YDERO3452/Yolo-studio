@@ -61,7 +61,7 @@ class TrainingChart(FigureCanvas):
         self.fig.tight_layout(pad=2.0)
 
     def _style_axes(self, ax, title):
-        ax.set_facecolor(Theme.SURFACE)
+        ax.set_facecolor(Theme.SURFACE_2)
         ax.set_title(title, color=Theme.TEXT, fontsize=10)
         ax.tick_params(colors=Theme.TEXT_MUTED, labelsize=8)
         ax.spines['bottom'].set_color(Theme.BORDER_STRONG)

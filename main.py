@@ -27,6 +27,7 @@ from loguru import logger  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 from gui.main_window import MainWindow  # noqa: E402
+from gui.theme import apply_light_palette  # noqa: E402
 
 
 def global_exception_hook(exc_type, exc_value, exc_tb):
@@ -74,6 +75,14 @@ def main():
 
     # 创建应用
     app = QApplication(sys.argv)
+    # Pin light color scheme before any widget is created (blocks Windows dark bleed).
+    try:
+        from PyQt6.QtCore import Qt as _Qt
+
+        app.styleHints().setColorScheme(_Qt.ColorScheme.Light)
+    except Exception:
+        pass
+    apply_light_palette(app)
 
     # 设置应用信息
     app.setApplicationName("Yolo Studio")

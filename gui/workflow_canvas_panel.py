@@ -179,7 +179,7 @@ class WorkflowNode(QGraphicsRectItem):
     UTIL_W, UTIL_H = 132, 64
 
     STATUS_COLORS = {
-        "idle": Theme.BORDER_STRONG,
+        "idle": Theme.BORDER,
         "pending": Theme.TEXT_DIM,
         "running": Theme.ACCENT,
         "done": Theme.SUCCESS,
@@ -328,13 +328,13 @@ class WorkflowNode(QGraphicsRectItem):
         if self.spec.kind == "sub":
             border = Theme.ACCENT if selected else Theme.BORDER
             width = 1.2
-            fill = QColor(Theme.SURFACE)
+            fill = QColor(Theme.SURFACE_2)
         elif self.spec.kind == "utility":
-            border = Theme.ACCENT if selected else Theme.BORDER_STRONG
+            border = Theme.ACCENT if selected else Theme.BORDER
             width = 1.4
             fill = QColor(Theme.SURFACE_2)
         else:
-            status_color = self.STATUS_COLORS.get(self.status, Theme.BORDER_STRONG)
+            status_color = self.STATUS_COLORS.get(self.status, Theme.BORDER)
             border = Theme.ACCENT if selected else status_color
             width = 2.0 if self.status == "running" else 1.4
             fill = QColor(Theme.SURFACE_2)
@@ -366,7 +366,7 @@ class WorkflowScene(QGraphicsScene):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setSceneRect(-4000, -3000, 8000, 6000)
-        self.setBackgroundBrush(QBrush(QColor(Theme.BG)))
+        self.setBackgroundBrush(QBrush(QColor(Theme.SURFACE_2)))
         self.nodes: dict[str, WorkflowNode] = {}
         self._wire_source: Optional[WorkflowNode] = None
         self._temp_edge: Optional[_TempEdge] = None
@@ -512,7 +512,7 @@ class WorkflowScene(QGraphicsScene):
         grid = 32
         left = int(math.floor(rect.left() / grid) * grid)
         top = int(math.floor(rect.top() / grid) * grid)
-        pen_minor = QPen(QColor("#D0D0D0"))
+        pen_minor = QPen(QColor("#E6E6E6"))
         pen_minor.setWidth(0)
         painter.setPen(pen_minor)
         x = left

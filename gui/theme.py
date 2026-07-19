@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor, QPalette
+from PyQt6.QtWidgets import QApplication
+
 
 class Theme:
-    BG = "#E8E8E8"
-    RAIL = "#DCDCDC"
-    SURFACE = "#F2F2F2"
+    BG = "#F0F0F0"
+    RAIL = "#E8E8E8"
+    SURFACE = "#F7F7F7"
     SURFACE_2 = "#FFFFFF"
-    SURFACE_3 = "#E0E0E0"
-    BORDER = "#B8B8B8"
-    BORDER_STRONG = "#909090"
+    SURFACE_3 = "#EBEBEB"
+    BORDER = "#C8C8C8"
+    BORDER_STRONG = "#A8A8A8"
     TEXT = "#222222"
     TEXT_MUTED = "#555555"
     TEXT_DIM = "#777777"
@@ -21,9 +25,62 @@ class Theme:
     WARNING = "#B86E00"
     DANGER = "#C62828"
     SELECTION = "#D6E4FF"
-    # Light mid-gray stage — enough contrast for images, no dark-mode slab
-    CANVAS_BG = "#D4D4D4"
+    # Match white panels — no gray stage slab that reads as dark-mode leftover
+    CANVAS_BG = "#FFFFFF"
     CANVAS_HINT = "#555555"
+
+
+def apply_light_palette(app: QApplication | None = None) -> None:
+    """Force a light QPalette so Windows dark mode cannot bleed into Qt widgets."""
+    app = app or QApplication.instance()
+    if app is None:
+        return
+
+    try:
+        app.styleHints().setColorScheme(Qt.ColorScheme.Light)
+    except Exception:
+        pass
+
+    p = QPalette()
+    window = QColor(Theme.BG)
+    base = QColor(Theme.SURFACE_2)
+    alt = QColor(Theme.SURFACE)
+    text = QColor(Theme.TEXT)
+    muted = QColor(Theme.TEXT_MUTED)
+    dim = QColor(Theme.TEXT_DIM)
+    button = QColor(Theme.SURFACE_3)
+    accent = QColor(Theme.ACCENT)
+    selection = QColor(Theme.SELECTION)
+
+    p.setColor(QPalette.ColorRole.Window, window)
+    p.setColor(QPalette.ColorRole.WindowText, text)
+    p.setColor(QPalette.ColorRole.Base, base)
+    p.setColor(QPalette.ColorRole.AlternateBase, alt)
+    p.setColor(QPalette.ColorRole.Text, text)
+    p.setColor(QPalette.ColorRole.Button, button)
+    p.setColor(QPalette.ColorRole.ButtonText, text)
+    p.setColor(QPalette.ColorRole.BrightText, QColor("#FFFFFF"))
+    p.setColor(QPalette.ColorRole.Highlight, selection)
+    p.setColor(QPalette.ColorRole.HighlightedText, text)
+    p.setColor(QPalette.ColorRole.ToolTipBase, base)
+    p.setColor(QPalette.ColorRole.ToolTipText, text)
+    p.setColor(QPalette.ColorRole.PlaceholderText, muted)
+    p.setColor(QPalette.ColorRole.Link, accent)
+    p.setColor(QPalette.ColorRole.Light, QColor("#FFFFFF"))
+    p.setColor(QPalette.ColorRole.Midlight, QColor(Theme.SURFACE_3))
+    p.setColor(QPalette.ColorRole.Mid, QColor(Theme.BORDER))
+    p.setColor(QPalette.ColorRole.Dark, QColor(Theme.BORDER_STRONG))
+    p.setColor(QPalette.ColorRole.Shadow, QColor("#808080"))
+
+    for role in (
+        QPalette.ColorRole.WindowText,
+        QPalette.ColorRole.Text,
+        QPalette.ColorRole.ButtonText,
+        QPalette.ColorRole.ToolTipText,
+    ):
+        p.setColor(QPalette.ColorGroup.Disabled, role, dim)
+
+    app.setPalette(p)
 
 
 def build_stylesheet() -> str:
@@ -103,7 +160,7 @@ def build_stylesheet() -> str:
         border-bottom: 1px solid {Theme.BORDER};
     }}
     QWidget#StageOverlayDim {{
-        background: {Theme.BG};
+        background: {Theme.SURFACE_2};
     }}
     QWidget#StageOverlay {{
         background: {Theme.SURFACE_2};
@@ -552,16 +609,17 @@ def build_stylesheet() -> str:
     }}
     QScrollArea#CanvasScrollArea {{
         background: {Theme.CANVAS_BG};
+        border: none;
     }}
     QScrollArea#CanvasScrollArea > QWidget > QWidget {{
         background: {Theme.CANVAS_BG};
     }}
     QGraphicsView#WorkflowView {{
-        background: {Theme.BG};
+        background: {Theme.SURFACE_2};
         border: none;
     }}
     QWidget#WorkflowCanvasPanel {{
-        background: {Theme.BG};
+        background: {Theme.SURFACE_2};
     }}
     QScrollArea#InspectorScroll {{
         background: {Theme.SURFACE};

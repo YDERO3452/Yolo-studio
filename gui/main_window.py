@@ -45,7 +45,7 @@ from gui.main_window_annotation import AnnotationWorkbenchMixin
 from gui.main_window_workflow import WorkflowOpsMixin
 from gui.node_sheet import NodeSheet
 from gui.project_panel import ProjectPanel
-from gui.theme import Theme, build_stylesheet
+from gui.theme import Theme, apply_light_palette, build_stylesheet
 from gui.training_panel import TrainingPanel
 from gui.training_results_panel import TrainingResultsPanel
 from gui.workflow_canvas_panel import ALL_STAGES, WorkflowCanvasPanel
@@ -496,6 +496,7 @@ class MainWindow(WorkflowOpsMixin, AnnotationWorkbenchMixin, QMainWindow):
             font = QFont()
             font.setPointSize(9)
             app.setFont(font)
+            apply_light_palette(app)
         self.setStyleSheet(build_stylesheet())
 
     def eventFilter(self, obj, event):
